@@ -19,7 +19,7 @@
       <rect class="hit" id="hM" x="186" y="64" width="28" height="28" rx="14"/>
     </svg>
     <p class="nota-sch">Pulsa la bomba M del esquema para activar o parar el llenado automático.</p>
-    <div class="chk"><label><input type="checkbox" id="cIn" checked> Ver por dentro</label></div>`;
+    <div class="chk"><label><input type="checkbox" id="cIn" checked> Carcasa transparente</label></div>`;
 
   function build(ctx, panel) {
     const { T, V, scene, M, boxR, cyl, tube, curva, part: P } = ctx;
@@ -60,6 +60,57 @@
     }
     const pil = UT.bombilla(ctx, V(-5.6, 0, -1.6), 'piloto', .5);
 
+    // ---- vista por dentro: electrodos, pared del depósito y agua ----
+    const D = UT.detalle(ctx, { w: 13.5, h: 8.6, titulo: 'DETALLE A · CAMPO ELÉCTRICO DELANTE DE LA CARA · ESCALA 3:1' }), G = D.g;
+    const bx = (x0, x1, y0, y1, mat, id, z = .3) => P(boxR(x0, x1, y0, y1, -z, z, mat, G), id);
+    for (const sg of [1, -1]) { bx(-6.2, -1.4, sg * 2.3, sg * 2.5, M(0xaab1b9, { metalness: .7, roughness: .35 }), 'cuerpo', .35); bx(-1.92, -1.76, sg * 1.5, sg * 2.05, m.copper, 'electrodos'); }
+    bx(-1.92, -1.76, -.9, .9, m.copper, 'electrodos');
+    bx(-1.62, -1.42, -2.3, 2.3, M(0xe0a800, { roughness: .5, transparent: true, opacity: .55 }), 'cara', .35);
+    bx(-6.0, -3.0, -.12, .12, M(0x1f6b3a, { roughness: .6 }), 'circuito', .5);
+    [[-5.4, .3], [-4.5, -.3], [-3.7, .3]].forEach(([x, y]) => bx(x - .25, x + .25, y - .18, y + .18, m.black, 'circuito', .55));
+    const pared = bx(-1.36, -1.08, -3.1, 3.1, new T.MeshPhysicalMaterial({ color: 0xe8eef4, transparent: true, opacity: .45, roughness: .2, depthWrite: false }), 'deposito', .45);
+    const gA2 = new T.BoxGeometry(7.2, 1, .9); gA2.translate(0, .5, 0);
+    const aguaD = P(new T.Mesh(gA2, new T.MeshPhysicalMaterial({ color: 0x3b8fe0, transparent: true, opacity: .4, roughness: .1, depthWrite: false })), 'agua', true);
+    aguaD.position.set(-1.08 + 3.6, -3.1, 0); aguaD.renderOrder = 1; G.add(aguaD);
+    const sig = (t, x, y) => D.etiqueta(x, y, .45, .45, { size: .9, z: .5, bg: 'rgba(8,36,72,.9)' })(t);
+    sig('+', -2.3, 0); sig('−', -2.3, 1.78); sig('−', -2.3, -1.78);
+    // moléculas de agua (dipolos): rojo = lado negativo (O), blanco = lado positivo (H)
+    const dip = [], gO = new T.SphereGeometry(.13, 10, 8), gH = new T.SphereGeometry(.09, 8, 6), mO = M(0xe0245e), mH = M(0xf4f6fa);
+    for (let i = 0; i < 8; i++) for (let j = 0; j < 7; j++) {
+      const o = new T.Group(), x = -.6 + i * .78 + (j % 2) * .3, y = -2.75 + j * .8; o.position.set(x, y, .5); G.add(o);
+      const a = new T.Mesh(gO, mO); a.position.x = -.09; o.add(a); const b = new T.Mesh(gH, mH); b.position.x = .14; o.add(b);
+      dip.push({ o, x, y, r: Math.random() * Math.PI * 2, w: (Math.random() - .5) * 3 });
+    }
+    // líneas de campo del electrodo central (+) al anillo (−); con agua aparecen más líneas
+    const lineas = [];
+    for (const sg of [1, -1]) for (let k = 1; k <= 5; k++) lineas.push({ sg, k, t: D.traza(42, { color: 0xff8fb0, op: .5 }), f: ctx.flow({ color: 0xe0245e, size: .06, gap: .2 }) });
+    const arco = (sg, k) => { const yi = .15 + .15 * k, yo = 1.55 + .1 * k, yc = (yi + yo) / 2, ry = (yo - yi) / 2, rx = .5 + .75 * k, out = [];
+      for (let i = 0; i <= 40; i++) { const a = -Math.PI / 2 + Math.PI * i / 40; out.push([-1.76 + rx * Math.cos(a), sg * (yc + ry * Math.sin(a))]); } return out; };
+    const osc = D.traza(160, { color: 0xffd166 });
+    D.etiqueta(-4.6, 3.55, 3.4, .4, { align: 'left', size: .7 })('OSCILADOR');
+    D.linea([[-6.3, 3.0], [-1.2, 3.0]], { op: .3 });
+    const cTxt = D.etiqueta(3.2, 3.3, 5.6, .45, { size: .7, align: 'right' });
+    const bloques = D.cadena(['ELECTRODOS', 'OSCILADOR', 'DEMODULADOR', 'DISPARADOR', 'SALIDA'], -3.65, -6.3, 6.3);
+    let fz = 0;
+    const det = (dt, h, cub, senal, umbral) => {
+      fz += dt * Math.PI * 2 * .6; const sgn = Math.cos(fz);
+      const yw = Math.max(-3.1, Math.min(3.1, (h - Y) * 2.56));
+      aguaD.scale.y = Math.max(.001, yw + 3.1); aguaD.visible = yw > -3.05;
+      const ampO = Math.max(.04, Math.min(1, (senal - umbral + .3) / .3));
+      lineas.forEach(L => { const pts = arco(L.sg, L.k), dentro = pts.filter(p => p[0] > -1.08 && p[1] < yw).length / pts.length;
+        const v = L.k <= 3 ? .35 + .65 * dentro : dentro * 1.2;
+        L.t.set((u, i) => pts[Math.min(i, pts.length - 1)]); L.t.l.material.opacity = .08 + .55 * Math.min(1, v);
+        L.f.path(pts.map(p => D.W(p[0], p[1], .45))).set(Math.min(1, v), 1.2 * sgn); });
+      dip.forEach(q => { const bajo = q.y < yw - .1; q.o.visible = bajo; if (!bajo) return;
+        const campo = Math.max(0, 1 - (q.x + 1) / 4.2) * Math.min(1, Math.abs(q.y) < 2.4 ? 1 : .4);
+        q.r += q.w * dt * (1 - campo); const obj = sgn > 0 ? 0 : Math.PI;
+        let dA = ((obj - q.r) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI; q.r += dA * Math.min(1, dt * 6 * campo);
+        q.o.rotation.z = q.r; });
+      osc.set(u => [-6.3 + u * 5.1, 3.0 + Math.sin(u * Math.PI * 12 - fz * 3) * .42 * ampO]);
+      cTxt('C = ' + fmt(2 + 10 * senal, 1) + ' pF', on ? '#ffd166' : '#eaf2ff');
+      bloques[0](.3 + .7 * cub); bloques[1](ampO); bloques[2](ampO); bloques[3](on ? 1 : 0); bloques[4](on ? 1 : 0);
+    };
+
     const $ = s => panel.querySelector(s);
     const autoB = $('#auto'), niv = $('#niv'), nivV = $('#nivV'), sensI = $('#sens'), sensV = $('#sensV'), msg = $('#msg');
     const r = { N: $('#rN'), C: $('#rC'), O: $('#rO'), B: $('#rB') }, s = { h1: $('#h1'), k: $('#sK'), M: $('#sM'), fB: $('#fB') };
@@ -92,6 +143,7 @@
         agua.scale.y = Math.max(.01, h);
         fT.set(bomba ? 1 : 0, 2); fD.set(vacia ? 1 : 0, 1.6);
         campo.forEach(f => f.set(.45 + .55 * cub, 1.1));
+        det(dt, h, cub, senal, umbral);
         cs.led.material.emissiveIntensity = on ? 2 : 0; pil.setLuz(on ? 1 : 0);
         ranura.rotation.x = sens * 4; aj.rotation.y = sens * 4;
 
@@ -109,7 +161,12 @@
         s.k.setAttribute('x2', on ? 212 : 200); s.k.setAttribute('y2', on ? 42 : 39);
         s.M.style.fill = bomba ? 'rgba(59,143,224,.35)' : 'none'; s.fB.classList.toggle('live', bomba);
       },
+      dentro: D.dentro,
       labels: [
+        { p: 'electrodos', txt: 'Electrodos', at: () => D.W(-1.84, 2.05, .3), l: 1 },
+        { p: 'deposito', txt: 'Pared del depósito', at: () => D.W(-1.1, 3.1, .45) },
+        { p: 'agua', txt: 'Agua (dipolos)', at: () => D.W(5.2, Math.max(-2.9, Math.min(2.9, (nivel / 100 * 5 + .05 - Y) * 2.56)) - .1, .45) },
+        { p: 'circuito', txt: 'Electrónica', at: () => D.W(-4.5, .45, .5) },
         { p: 'cara', txt: 'Cara sensible', at: () => V(.1, Y + .9, 0) },
         { p: 'electrodos', at: () => V(-.1, Y - .65, .3), l: 1 },
         { p: 'circuito', txt: 'Oscilador y disparador', at: () => V(-2.0, Y + .55, .1) },
@@ -126,7 +183,7 @@
     id: 'capacitivo', nombre: 'Detector capacitivo', categoria: 'Sensores', grupo: 'Capacitivos',
     resumen: 'Detecta casi cualquier material, incluso líquidos a través de una pared.',
     titulo: 'Detector capacitivo: nota el agua a través del plástico',
-    lead: 'La bomba llena el depósito hasta que el detector, pegado por fuera, nota el agua y la para. Cambia la sensibilidad con el tornillo para ver qué pasa si te pasas.',
+    lead: 'La bomba llena el depósito hasta que el detector, pegado por fuera, nota el agua y la para. Cambia la sensibilidad con el tornillo para ver qué pasa si te pasas. Con «Ver por dentro» verás el campo eléctrico y cómo se orientan las moléculas de agua.',
     camara: { pos: [4.5, 8.5, 17], tgt: [.4, 2.2, 0] }, suelo: -.32,
     panel: PANEL, build,
     leyenda: [['#e0245e', 'Campo eléctrico de los electrodos'], ['#3b8fe0', 'Agua']],

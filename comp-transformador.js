@@ -36,20 +36,30 @@
     // núcleo de chapas
     P(boxR(-2.4, -1.4, .5, 4.9, -.6, .6, lam), 'nucleo'); P(boxR(1.4, 2.4, .5, 4.9, -.6, .6, lam), 'nucleo');
     P(boxR(-1.4, 1.4, 3.9, 4.9, -.6, .6, lam), 'nucleo'); P(boxR(-1.4, 1.4, .5, 1.5, -.6, .6, lam), 'nucleo');
-    // bobinados
-    const w1 = P(cyl(.95, 2.2, m.wind, -1.9, 2.7, 0, null, 40), 'primario');
-    const w2 = P(cyl(.95, 2.2, m.wind2, 1.9, 2.7, 0, null, 40), 'secundario');
-    for (const [x, id] of [[-1.9, 'primario'], [1.9, 'secundario']]) { P(cyl(1.02, .07, m.dark, x, 1.58, 0, null, 40), id); P(cyl(1.02, .07, m.dark, x, 3.82, 0, null, 40), id); }
-    UT.rotulo(ctx, 'N1', .5, .3, V(-1.9, 2.7, .96), [0, 0, 0], { color: '#fff' });
-    UT.rotulo(ctx, 'N2', .5, .3, V(1.9, 2.7, .96), [0, 0, 0], { color: '#fff' });
+    // bobinados: espiras visibles de verdad. El primario siempre igual (muchas espiras de hilo fino);
+    // el secundario se rehace al cambiar de transformador: menos espiras = menos tensión, y hilo más grueso = más corriente
+    const Y0 = 1.72, Y1 = 3.68, A1 = Math.atan2(.9, .25), A2 = Math.atan2(.9, -.25);
+    const helice = (cx, nv, wr, a0, mat) => {
+      const r = .8 + wr, pts = espiral(cx, 0, r, Y1, Y0, a0, a0 + Math.PI * 2 * nv, Math.max(80, nv * 40));
+      return { mesh: ctx.add(new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts), Math.max(80, nv * 48), wr, 6), mat)), top: pts[0], bot: pts[pts.length - 1], r };
+    };
+    for (const [x, id] of [[-1.9, 'primario'], [1.9, 'secundario']]) {
+      P(cyl(.8, 2.04, m.card, x, 2.7, 0, null, 32), id);
+      P(cyl(1.08, .07, m.dark, x, 1.62, 0, null, 40), id); P(cyl(1.08, .07, m.dark, x, 3.78, 0, null, 40), id);
+    }
+    const cuP = M(0xc8742f, { metalness: .55, roughness: .35, emissive: 0xff4a00, emissiveIntensity: 0 });
+    const hP = helice(-1.9, 40, .024, A1, cuP); const w1 = P(hP.mesh, 'primario');
+    const rotN1 = UT.rotulo(ctx, 'N1 = 1150', 1.1, .42, V(-1.9, 5.25, .3), [0, 0, 0], { color: '#fff' });
+    const rotN2 = UT.rotulo(ctx, 'N2 = 120', 1.1, .42, V(1.9, 5.25, .3), [0, 0, 0], { color: '#fff' });
+    const VIS = { '24': [4, .11], '12': [2, .16], '115': [20, .045] };   // espiras dibujadas y grosor del hilo
+    let bobS = null;
     // regletas
     for (const [x, id] of [[-3.4, 'regletaP'], [3.4, 'regletaS']]) {
       P(boxR(x - .4, x + .4, 0, .8, -.8, .8, m.plastic), id);
       for (const z of [-.4, .4]) UT.tornillo(ctx, x, .85, z, m.steel, m.black, id, true);
     }
-    const lP1 = [V(-1.65, 3.75, .9), V(-2.9, 2.4, 1.0), V(-3.4, .9, .4)], lP2 = [V(-1.65, 1.65, .9), V(-2.8, 1.2, .2), V(-3.4, .9, -.4)];
-    const lS1 = [V(1.65, 3.75, .9), V(2.9, 2.4, 1.0), V(3.4, .9, .4)], lS2 = [V(1.65, 1.65, .9), V(2.8, 1.2, .2), V(3.4, .9, -.4)];
-    [lP1, lP2].forEach(c => P(tube(c, .045, m.copper), 'primario')); [lS1, lS2].forEach(c => P(tube(c, .06, m.copper), 'secundario'));
+    const lP1 = [hP.top, V(-2.9, 2.6, 1.05), V(-3.4, .9, .4)], lP2 = [hP.bot, V(-2.8, 1.2, .3), V(-3.4, .9, -.4)];
+    [lP1, lP2].forEach(c => P(tube(c, .045, cuP), 'primario'));
     // fuente y lámpara
     P(boxR(-5.9, -4.7, 0, 1.7, -.8, .8, m.dark), 'red');
     const rotRed = UT.rotulo(ctx, [['RED', 56], ['230 V~', 44]], 1.0, .7, V(-5.3, 1.1, .81), [0, 0, 0], { color: '#e9e8e3' });
@@ -59,9 +69,19 @@
     const lamp = UT.bombilla(ctx, V(5.3, 0, 0), 'lampara', 1);
 
     // corrientes y flujo
-    const f1 = ctx.flow({ color: 0xff5a1f, size: .065, gap: .26 }), f2 = ctx.flow({ color: 0xffc400, size: .075, gap: .3 }), fF = ctx.flow({ color: 0x2f8cff, size: .08, gap: .3 });
-    f1.path([...curva(wP1), ...curva(lP1).reverse(), ...espiral(-1.9, 0, 1.0, 3.7, 1.7, .35, .35 + Math.PI * 16), ...curva(lP2), ...curva(wP2)]);
-    f2.path([...curva(wS2), ...curva(lS2).reverse(), ...espiral(1.9, 0, 1.0, 1.7, 3.7, Math.PI - .35, Math.PI - .35 - Math.PI * 10), ...curva(lS1), ...curva(wS1), V(5.3, .9, 0), V(5.3, .25, -.12)]);
+    const f1 = ctx.flow({ color: 0xff5a1f, size: .065, gap: .26 }), f2 = ctx.flow({ color: 0xffc400, size: .075, gap: .3, max: 420 }), fF = ctx.flow({ color: 0x2f8cff, size: .08, gap: .3 });
+    f1.path([...curva(wP1), ...curva(lP1).reverse(), ...espiral(-1.9, 0, hP.r + .05, Y1, Y0, A1, A1 + Math.PI * 16), ...curva(lP2), ...curva(wP2)]);
+    const cuS = M(0xd08a3a, { metalness: .55, roughness: .35, emissive: 0xffa000, emissiveIntensity: 0 });
+    const hacerSec = k => {
+      if (bobS) bobS.mallas.forEach(o => { ctx.unpart(o); scene.remove(o); o.geometry.dispose(); });
+      const [nv, wr] = VIS[k], h = helice(1.9, nv, wr, A2, cuS);
+      const lS1 = [h.top, V(2.9, 2.6, 1.05), V(3.4, .9, .4)], lS2 = [h.bot, V(2.8, 1.2, .3), V(3.4, .9, -.4)];
+      const mallas = [P(h.mesh, 'secundario'), P(tube(lS1, wr * .8, cuS), 'secundario'), P(tube(lS2, wr * .8, cuS), 'secundario')];
+      const esp = []; for (let i = 0; i <= nv * 40; i++) { const a = A2 + Math.PI * 2 * nv * (1 - i / (nv * 40)); esp.push(V(1.9 + (h.r + wr + .03) * Math.cos(a), Y0 + (Y1 - Y0) * i / (nv * 40), (h.r + wr + .03) * Math.sin(a))); }
+      f2.path([...curva(wS2), ...curva(lS2).reverse(), ...esp, ...curva(lS1), ...curva(wS1), V(5.3, .9, 0), V(5.3, .25, -.12)]);
+      rotN2.material.map = ctx.texto('N2 = ' + REL[k][1], { w: 512, h: 196, size: 120, color: '#fff' }); rotN2.material.needsUpdate = true;
+      bobS = { mallas };
+    };
     fF.path([V(-1.9, 1.0, .62), V(-1.9, 4.4, .62), V(1.9, 4.4, .62), V(1.9, 1.0, .62), V(-1.9, 1.0, .62)]);
 
     const $ = s => panel.querySelector(s);
@@ -75,7 +95,8 @@
     ctx.accion('red', () => s1B.onclick(), { pista: 'Púlsala en el modelo para conectar o desconectar el transformador.' });
     ctx.accion('lampara', lampClic, { pista: 'Púlsala en el modelo para conectarla o quitarla del secundario.' });
     UT.opciones($('#tipo'), v => { ac = v === 'ac'; rotRed.material.map = ctx.texto([['RED', 56], [ac ? '230 V~' : '230 V =', 44]], { w: 256, h: 180, size: 60, color: '#e9e8e3' }); rotRed.material.needsUpdate = true; });
-    UT.opciones($('#rel'), v => { rel = v; });
+    UT.opciones($('#rel'), v => { rel = v; hacerSec(v); });
+    hacerSec('24');
 
     return {
       tecla: () => s1B.onclick(),
@@ -92,7 +113,7 @@
         const V2 = on && ac ? V1 * N2 / N1 : 0, R = V2n * V2n / P_LAMP;
         const I2 = carga ? V2 / R : 0, I1 = I2 * N2 / N1;
 
-        w1.material.emissiveIntensity = on && !ac ? .45 : 0;
+        w1.material.emissiveIntensity = on && !ac ? .55 : 0; bobS.mallas[0].material.emissiveIntensity = carga && on && ac ? .3 * Math.abs(Math.cos(fase)) : 0;
         lamp.setLuz(carga ? (on && ac ? Math.min(1, (V2 / V2n) ** 2) : pulso) : 0);
         const vel1 = on ? (ac ? Math.cos(fase) * 1.6 : 2.2) : 0;
         f1.set(on ? 1 : 0, vel1);
@@ -144,8 +165,8 @@
     ],
     partes: {
       nucleo:     { t: 'Núcleo de chapas', d: 'Hierro al silicio en chapas finas aisladas entre sí. Conduce el flujo de un bobinado a otro y, al estar laminado, reduce las pérdidas por corrientes de Foucault.' },
-      primario:   { t: 'Bobinado primario', d: 'El que se conecta a la red. Tiene muchas espiras (N1) de hilo fino.' },
-      secundario: { t: 'Bobinado secundario', d: 'El que alimenta la carga. En un reductor tiene menos espiras (N2) pero de hilo más grueso, porque lleva más corriente.' },
+      primario:   { t: 'Bobinado primario', d: 'El que se conecta a la red. Tiene muchas espiras (N1 = 1150) de hilo fino. En el modelo se dibujan 40 para que se puedan ver.' },
+      secundario: { t: 'Bobinado secundario', d: 'El que alimenta la carga. Al cambiar de transformador cambia: 230/115 V tiene la mitad de espiras que el primario; 230/24 V muchas menos y de hilo más grueso; 230/12 V todavía menos y más gordo, porque lleva más corriente.' },
       soporte:    { t: 'Soporte', d: 'Escuadras metálicas que aprietan las chapas y fijan el transformador.' },
       regletaP:   { t: 'Bornes del primario', d: 'Entrada de la red (230 V).' },
       regletaS:   { t: 'Bornes del secundario', d: 'Salida a la tensión reducida.' },

@@ -4,7 +4,7 @@ window.COMPONENTES = window.COMPONENTES || [];
 window.Motor = (() => {
   const T = THREE, V = (x, y, z) => new T.Vector3(x, y, z);
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let R, fig, labelsEl, info, legendEl, quizEl, cur = null, raf = 0, W = 1, H = 1, modoNombres = 'siempre', speed = 1;
+  let vdB, R, fig, labelsEl, info, legendEl, quizEl, cur = null, raf = 0, W = 1, H = 1, modoNombres = 'siempre', speed = 1;
   const ray = new T.Raycaster(), ndc = new T.Vector2();
 
   // ---------- utilidades de construcción ----------
@@ -194,7 +194,9 @@ window.Motor = (() => {
     cv.addEventListener('pointerleave', () => { if (cur) cur.hover = null; });
     info.querySelector('button').addEventListener('click', () => select(null));
     quizEl.addEventListener('click', e => { if (e.target.closest('[data-q=salir]')) quiz(false); });
-    f.querySelector('.vr').addEventListener('click', () => { if (cur) { cur.camera.position.copy(cur.home.pos); cur.controls.target.copy(cur.home.tgt); } });
+    vdB = f.querySelector('.vd');
+    f.querySelector('.vr').addEventListener('click', () => { if (cur) { dentro(false); ir(cur.home); } });
+    vdB.addEventListener('click', () => { if (cur && cur.api.dentro) dentro(!cur.enDentro); });
     labelsEl.addEventListener('click', e => { const b = e.target.closest('[data-p]'); if (b) select(b.dataset.p); });
     labelsEl.addEventListener('pointerover', e => { const b = e.target.closest('[data-p]'); if (b && cur) cur.hover = b.dataset.p; });
     addEventListener('keydown', e => {
@@ -202,6 +204,15 @@ window.Motor = (() => {
       if (e.key === 'Escape') { if (cur.quiz) quiz(false); else select(null); }
       if (e.code === 'Space' && cur.api.tecla && !/^(INPUT|BUTTON|A|SELECT|TEXTAREA)$/.test(e.target.tagName) && !e.target.closest('[role=button]')) { e.preventDefault(); cur.api.tecla(); }
     });
+  }
+  // movimiento suave de la cámara
+  function ir(v) { cur.tw = { p0: cur.camera.position.clone(), t0: cur.controls.target.clone(), p1: v.pos.clone(), t1: v.tgt.clone(), k: 0, s: performance.now() }; }
+  function dentro(v) {
+    if (!cur || !cur.api.dentro) return;
+    cur.enDentro = v; vdB.setAttribute('aria-pressed', v); vdB.textContent = v ? 'Ver el montaje' : 'Ver por dentro';
+    const d = cur.api.dentro;
+    ir(v ? { pos: V(...d.pos), tgt: V(...d.tgt) } : cur.home);
+    if (cur.api.alCambiarVista) cur.api.alCambiarVista(v);
   }
   function resize() {
     W = fig.clientWidth; H = fig.clientHeight; if (!W || !H) return;
@@ -229,7 +240,7 @@ window.Motor = (() => {
     }
     legendEl.innerHTML = (spec.leyenda || []).map(([c, t]) => `<span><i style="background:${c}"></i>${t}</span>`).join('');
 
-    const scene = new T.Scene(), camera = new T.PerspectiveCamera(38, 1, .1, 200);
+    const scene = new T.Scene(), camera = new T.PerspectiveCamera(38, 1, .1, 120);
     const home = { pos: V(...spec.camara.pos), tgt: V(...spec.camara.tgt) };
     camera.position.copy(home.pos);
     const controls = new T.OrbitControls(camera, R.domElement);
@@ -247,8 +258,9 @@ window.Motor = (() => {
 
     cur = { comp: spec, scene, camera, controls, home, el, pick: [], pm: {}, hidden: new Set(), sel: null, hover: null, hovPrev: null, step: -1,
       clock: new T.Clock(), t: 0, flows: [], sparks: [], sparkLight, acc: {}, quiz: null };
-    const ctx = { T, V, scene, camera, reduce, M, add, boxR, cyl, tube, curva, espiral, texto, plano, part, unpart, flow, spark, step: setStep, select, accion };
+    const ctx = { T, V, scene, camera, reduce, M, add, boxR, cyl, tube, curva, espiral, texto, plano, part, unpart, flow, spark, step: setStep, select, accion, dentro: v => dentro(v) };
     cur.api = spec.build(ctx, el.panel);
+    cur.enDentro = false; vdB.hidden = !cur.api.dentro; vdB.setAttribute('aria-pressed', false); vdB.textContent = 'Ver por dentro';
 
     labelsEl.innerHTML = (cur.api.labels || []).map(o =>
       `<button class="lb${o.l ? ' l' : ''}${cur.acc[o.p] ? ' acc' : ''}" data-p="${o.p}" aria-pressed="false"><i></i><span>${o.txt || spec.partes[o.p].t}</span></button>`).join('');
@@ -281,6 +293,12 @@ window.Motor = (() => {
     if (c.sel) {
       const k = reduce ? .5 : .42 + .18 * Math.sin(performance.now() / 170);
       mats(c.sel).forEach(m => { if (m.emissive) { m.emissive.setHex(0x2f8cff); m.emissiveIntensity = k; } });
+    }
+    if (c.tw) {
+      const tw = c.tw; tw.k = reduce ? 1 : Math.min(1, (performance.now() - tw.s) / 650);
+      const e = tw.k < .5 ? 2 * tw.k * tw.k : 1 - (-2 * tw.k + 2) ** 2 / 2;
+      c.camera.position.lerpVectors(tw.p0, tw.p1, e); c.controls.target.lerpVectors(tw.t0, tw.t1, e);
+      if (tw.k >= 1) c.tw = null;
     }
     c.controls.update();
     R.render(c.scene, c.camera);

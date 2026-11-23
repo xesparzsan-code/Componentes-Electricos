@@ -65,6 +65,53 @@
     const fA = ctx.flow({ color: 0xffc400, size: .045, gap: .2 }), fB = ctx.flow({ color: 0xffc400, size: .045, gap: .2 });
     let tubos = [];
 
+    // ---- vista por dentro: la rejilla se alarga y se estrecha ----
+    const D = UT.detalle(ctx, { w: 13.5, h: 8.6, titulo: 'DETALLE A · REJILLA DE LA GALGA · DEFORMACIÓN EXAGERADA ×250' }), G = D.g;
+    const XA = -5.6, L0 = 6.6, NS = 8, YS = .55, DY = .33, W0 = .17;
+    const film = P(new T.Mesh(new T.PlaneGeometry(1, 1), M(0xe9b44c, { roughness: .6 })), 'galga'); film.position.z = -.05; G.add(film);
+    const cuM = M(0xb5651d, { metalness: .5, roughness: .4, emissive: 0xff3000, emissiveIntensity: 0 });
+    const hilos = []; for (let i = 0; i < NS; i++) { const b = P(new T.Mesh(new T.BoxGeometry(1, 1, .08), cuM), 'galga'); G.add(b); hilos.push(b); }
+    const codos = []; for (let i = 0; i < NS - 1; i++) { const b = P(new T.Mesh(new T.BoxGeometry(1, 1, .08), cuM), 'galga'); G.add(b); codos.push(b); }
+    for (const y of [YS - .1, YS + DY * (NS - 1) + .1]) P(boxR(XA - 1.1, XA - .35, y - .28, y + .28, -.04, .04, M(0xb87333, { metalness: .6, roughness: .35 }), G), 'galga');
+    const fE = ctx.flow({ color: 0xffd166, size: .055, gap: .24 });
+    const cotaL = D.cota(3.35), tL = D.etiqueta(-1.6, 3.62, 4.6, .36, { size: .75 });
+    D.linea([[XA, 3.15], [XA, 3.55]], { op: .5 }); D.linea([[XA + L0, .2], [XA + L0, 3.55]], { dash: .1, op: .6 }); D.etiqueta(XA + L0, .02, 1.2, .3, { size: .7 })('L₀');
+    const tR = D.etiqueta(4.6, 2.75, 3.6, .38, { size: .72 }), tR2 = D.etiqueta(4.6, 2.3, 3.6, .34, { size: .62 });
+    // sección del hilo: antes (discontinua) y ahora
+    const SX = 4.6, SY = .95, ref = []; for (let i = 0; i <= 40; i++) { const a = i / 40 * Math.PI * 2; ref.push([SX + Math.cos(a) * .55, SY + Math.sin(a) * .55, .1]); }
+    D.linea(ref, { dash: .08, op: .7 });
+    const secc = P(cyl(.55, .1, M(0xb5651d, { metalness: .5, roughness: .4 }), SX, SY, 0, G, 32), 'galga'); secc.rotation.x = Math.PI / 2;
+    D.etiqueta(SX, SY - .85, 2.4, .32, { size: .7 })('sección del hilo');
+    // viga vista de lado: arriba tracción, abajo compresión
+    const VX0 = -5.6, VL = 9.4, VY = -1.95, NV = 30, segV = []; for (let i = 0; i < NV; i++) segV.push(P(boxR(-VL / NV / 2 - .01, VL / NV / 2 + .01, -.4, .4, -.25, .25, M(0xb9c0c8, { metalness: .75, roughness: .3 }), G), 'viga'));
+    P(boxR(VX0 - .6, VX0, VY - .9, VY + .5, -.3, .3, M(0x4a5058, { metalness: .5, roughness: .45 }), G), 'empotramiento');
+    const galV = P(boxR(-.5, .5, 0, .07, -.2, .2, M(0xe9b44c), G), 'galga');
+    const flS = [], flI = []; for (let i = 0; i < 5; i++) { flS.push(D.traza(5, { color: 0xff8a7a })); flI.push(D.traza(5, { color: 0x8fd3ff })); }
+    D.etiqueta(3.6, -.75, 5.2, .32, { size: .7 })('arriba: se estira (tracción)', '#ff8a7a');
+    D.etiqueta(-1.6, -3.35, 5.2, .32, { size: .7 })('abajo: se acorta (compresión)', '#8fd3ff');
+    const det = (eps) => {
+      const e = Math.min(.3, eps / 1e-3 * .25), L = L0 * (1 + e), wd = W0 * (1 - .5 * e);
+      film.scale.set(L + .9, DY * (NS - 1) + .7, 1); film.position.set(XA + L / 2, YS + DY * (NS - 1) / 2, -.05);
+      hilos.forEach((b, i) => { b.scale.set(L, wd, 1); b.position.set(XA + L / 2, YS + i * DY, 0); });
+      codos.forEach((b, i) => { const xr = i % 2 ? XA : XA + L; b.scale.set(wd, DY + wd, 1); b.position.set(xr, YS + (i + .5) * DY, 0); });
+      cuM.emissiveIntensity = e * 1.6;
+      const pts = []; for (let i = 0; i < NS; i++) { const y = YS + i * DY, a = i % 2 ? XA + L : XA, b = i % 2 ? XA : XA + L; pts.push(D.W(a, y, .08), D.W(b, y, .08)); }
+      fE.path(pts).set(1, 1.6 / ((1 + e) / (1 - .5 * e) ** 2) ** 3);
+      cotaL(XA, XA + L); tL(eps > 1e-6 ? 'L₀ + ΔL' : 'L₀');
+      const R = R0 * (1 + K * eps);
+      tR('R = ' + fmt(R, 3) + ' Ω', eps > 1e-6 ? '#ffd166' : '#eaf2ff'); tR2('ΔR/R = K·ε = ' + fmt(K * eps * 100, 3) + ' %');
+      secc.scale.set(1 - .5 * e, 1, 1 - .5 * e);
+      const fl = x => -e * 2.2 * (x * x * (3 * VL - x)) / (2 * VL ** 3), pd = x => -e * 2.2 * (6 * VL * x - 3 * x * x) / (2 * VL ** 3);
+      const fib = (off) => (u) => { const x = u * VL, a = Math.atan(pd(x)); return [VX0 + x - Math.sin(a) * off, VY + fl(x) + Math.cos(a) * off]; };
+      segV.forEach((b, i) => { const x = (i + .5) * VL / NV; b.position.set(VX0 + x, VY + fl(x), 0); b.rotation.z = Math.atan(pd(x)); });
+      galV.position.set(VX0 + 1.9, VY + fl(1.9) + .4, .1); galV.rotation.z = Math.atan(pd(1.9));
+      const lg = .15 + 2.4 * e;
+      [flS, flI].forEach((arr, k) => arr.forEach((t, i) => { const x = .9 + i * 1.6, u = x / VL, p0 = fib(k ? -.75 : .75)(u), ang = Math.atan(pd(x)), dx = Math.cos(ang) * lg, dy = Math.sin(ang) * lg, out = k === 0;
+        const s2 = out ? 1 : -1, h = .12;
+        t.set((uu, j) => [[p0[0] - dx, p0[1] - dy], [p0[0] + dx, p0[1] + dy], [p0[0] + dx - s2 * .15 * Math.cos(ang) + h * Math.sin(ang), p0[1] + dy - s2 * .15 * Math.sin(ang) - h * Math.cos(ang)], [p0[0] + dx, p0[1] + dy], [p0[0] + dx - s2 * .15 * Math.cos(ang) - h * Math.sin(ang), p0[1] + dy - s2 * .15 * Math.sin(ang) + h * Math.cos(ang)]][j]);
+        t.l.visible = e > .005; }));
+    };
+
     const $ = s => panel.querySelector(s);
     const kgI = $('#kg'), kgV = $('#kgV'), msg = $('#msg');
     const r = { E: $('#rE'), R: $('#rR'), DR: $('#rDR'), V: $('#rV') }, vm = $('#vm'), sG = $('#sG');
@@ -84,6 +131,7 @@
         pesa.position.set(-4 + L - .2, Y + flecha(L - .2, d) - .15, 0);
         discos.forEach((dd, i) => { dd.visible = i < Math.round(kg * 2); });
         const eps = d / .26 * EPS_KG, R = R0 * (1 + K * eps), vo = VEX * K * eps / 4;
+        det(eps);
         galga.material.emissiveIntensity = Math.min(.6, eps / 1e-3 * .5);
         const k = d.toFixed(3);
         if (k !== clave) { clave = k; tubos.forEach(t => { ctx.unpart(t); scene.remove(t); t.geometry.dispose(); }); tubos = [1, -1].map(s => P(tube(lead(s), .035, s > 0 ? m.red : m.black), 'cables')); }
@@ -101,7 +149,10 @@
           : `R = R0 · (1 + K · ε) = 120 · (1 + 2 · ${fmt(eps * 1e6, 0)}·10⁻⁶) = ${fmt(R, 3)} Ω. Un cambio tan pequeño solo se puede medir con un puente: Vs ≈ Vex · K · ε / 4 = ${fmt(vo * 1000, 2)} mV.`;
         set(msg, t); msg.hidden = false;
       },
+      dentro: D.dentro,
       labels: [
+        { p: 'galga', txt: 'Rejilla de la galga', at: () => D.W(XA, YS + DY * (NS - 1), .1), l: 1 },
+        { p: 'empotramiento', txt: 'Empotramiento', at: () => D.W(VX0 - .6, VY + .5, .3), l: 1 },
         { p: 'galga', txt: 'Galga extensiométrica', at: () => ver() },
         { p: 'viga', txt: 'Viga en voladizo', at: () => V(1.5, Y + flecha(5.5, d) - .1, .7) },
         { p: 'empotramiento', at: () => V(-5.4, Y + .9, 1.3), l: 1 },
@@ -116,7 +167,7 @@
     id: 'galga', nombre: 'Galga extensiométrica', categoria: 'Sensores', grupo: 'Resistivos',
     resumen: 'Una resistencia que cambia al estirarse; se mide con un puente de Wheatstone.',
     titulo: 'Galga extensiométrica: medir cuánto se estira una pieza',
-    lead: 'Cuelga pesas del extremo de la viga. La superficie superior se estira, el hilo de la galga se alarga, su resistencia sube unas milésimas de ohmio y el puente lo convierte en milivoltios.',
+    lead: 'Cuelga pesas del extremo de la viga. La superficie superior se estira, el hilo de la galga se alarga, su resistencia sube unas milésimas de ohmio y el puente lo convierte en milivoltios. Con «Ver por dentro» verás cómo la rejilla se alarga y se estrecha.',
     camara: { pos: [1.5, 7.5, 19.5], tgt: [-2.2, .6, 0] }, suelo: -3.4,
     panel: PANEL, build,
     leyenda: [['#ffc400', 'Corriente de excitación del puente']],

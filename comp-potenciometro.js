@@ -59,6 +59,39 @@
     const fT = ctx.flow({ color: 0xff5a1f, size: .05, gap: .26 }).path([V(X1, .45, -.3), V(X0, .45, -.3)]);
     const fC = ctx.flow({ color: 0xffc400, size: .04, gap: .3 });
 
+    // ---- vista por dentro: la pista como divisor de tensión ----
+    const D = UT.detalle(ctx, { w: 13.5, h: 8.4, titulo: 'DETALLE A · LA PISTA RESISTIVA COMO DIVISOR DE TENSIÓN' }), G = D.g;
+    const XA = -5.4, XB = 5.4;
+    P(boxR(XA, XB, -.35, .35, -.3, .3, new T.MeshStandardMaterial({ map: tx, roughness: .7 }), G), 'pista');
+    P(boxR(XA, XB, -1.55, -1.1, -.3, .3, m.silver, G), 'colectora');
+    const cD = new T.Group(); G.add(cD);
+    P(boxR(-.1, .1, -1.3, .1, -.15, .15, m.bronze, cD), 'cursor');
+    { const k = P(new T.Mesh(new T.ConeGeometry(.28, .5, 3), m.bronze), 'cursor'); k.rotation.z = Math.PI; k.position.y = .62; cD.add(k); }
+    const et = (t, x, y, w2, o = {}) => D.etiqueta(x, y, w2, .36, Object.assign({ size: .75 }, o))(t);
+    et('3 · 0 V', XA - .1, -.75, 2.2); et('1 · 10 V', XB + .1, -.75, 2.2); et('2 · salida', XA + .9, -1.95, 2.4);
+    const c23 = D.cota(1.4), c12 = D.cota(2.25), t23 = D.etiqueta(0, 1.7, 3.6, .34, { size: .72 }), t12 = D.etiqueta(0, 2.55, 3.6, .34, { size: .72 });
+    // gráfica V(x) a lo largo de la pista
+    const GY = -3.35, GH = 1.2;
+    D.linea([[XA, GY], [XB, GY]], { op: .5 }); D.linea([[XA, GY], [XA, GY + GH + .1]], { op: .5 });
+    D.linea([[XA, GY], [XB, GY + GH]], { color: 0xffd166, op: .9 });
+    const pt = P(new T.Mesh(new T.SphereGeometry(.1, 12, 8), new T.MeshBasicMaterial({ color: 0x7ef0b0 })), 'cursor'); G.add(pt);
+    const guia = D.traza(2, { color: 0x7ef0b0, op: .7 }), guia2 = D.traza(2, { color: 0x7ef0b0, op: .4 });
+    et('10 V', XA - .65, GY + GH, 1.1, { size: .7 }); et('0 V', XA - .65, GY, 1.1, { size: .7 });
+    const tVo = D.etiqueta(0, 0, 1.6, .34, { size: .75, color: '#7ef0b0' });
+    const tV = D.etiqueta(0, 3.3, 11, .42, { size: .78 });
+    const fTD = ctx.flow({ color: 0xff5a1f, size: .07, gap: .3 }).path([D.W(XB, 0, .4), D.W(XA, 0, .4)]);
+    const fCD = ctx.flow({ color: 0xffc400, size: .05, gap: .35 });
+    const det = (p, Vo) => {
+      const x = XA + (XB - XA) * p / 100; cD.position.x = x;
+      c23(XA, x); c12(x, XB);
+      t23('R 2–3 = ' + fmt(RT * p / 100 / 1000, 2) + ' kΩ'); t23.mesh.position.x = (XA + x) / 2;
+      t12('R 1–2 = ' + fmt(RT * (1 - p / 100) / 1000, 2) + ' kΩ'); t12.mesh.position.x = (x + XB) / 2;
+      const gy = GY + GH * p / 100; pt.position.set(x, gy, .1);
+      guia.set((u, i) => i ? [x, gy, .1] : [x, -1.6, .1]); guia2.set((u, i) => i ? [XB + .2, gy, .1] : [x, gy, .1]); tVo(fmt(Vo, 2) + ' V'); tVo.mesh.position.set(XB + 1.0, gy, .1);
+      tV('I = 1 mA   ·   Vo = I · R 2–3 = 1 mA · ' + fmt(RT * p / 100 / 1000, 2) + ' kΩ = ' + fmt(Vo, 2) + ' V', '#7ef0b0');
+      fTD.set(1, 1.3); fCD.path([D.W(x, -.2, .4), D.W(x, -1.3, .4), D.W(XA, -1.3, .4)]).set(.8, .5);
+    };
+
     const $ = s => panel.querySelector(s);
     const posI = $('#pos'), posV = $('#posV'), autoB = $('#auto'), msg = $('#msg'), pto = $('#pto');
     const r = { P: $('#rP'), V: $('#rV'), a: $('#r12'), b: $('#r23') }, s = { W: $('#sW'), A: $('#sA'), W2: $('#sW2'), fT: $('#fT') };
@@ -76,6 +109,7 @@
         const Vo = VIN * p / 100;
         fT.set(1, 1.2);
         fC.path([V(xw, .45, -.3), V(xw, .45, .3), V(X0, .45, .3), V(-4.6, .25, 0), ...curva(wC, 12)]).set(1, .5);
+        det(p, Vo);
         disp(fmt(Vo, 2) + ' V');
         pto.setAttribute('cx', (150 + p / 100 * 140).toFixed(1)); pto.setAttribute('cy', (104 - Vo / 10 * 90).toFixed(1));
         const yW = 96 - p / 100 * 70;
@@ -87,7 +121,11 @@
         set(r.a, fmt(RT * (1 - p / 100) / 1000, 2) + ' kΩ'); set(r.b, fmt(RT * p / 100 / 1000, 2) + ' kΩ');
         set(msg, `El cursor está al ${Math.round(p)} % del recorrido, así que recoge el ${Math.round(p)} % de la tensión: ${fmt(Vo, 2)} V. La salida es lineal con la posición.`); msg.hidden = false;
       },
+      dentro: D.dentro,
       labels: [
+        { p: 'pista', txt: 'Pista resistiva', at: () => D.W(XA + 1.2, .35, .3), l: 1 },
+        { p: 'colectora', txt: 'Pista colectora', at: () => D.W(XB - 1.2, -1.1, .3) },
+        { p: 'cursor', txt: 'Cursor', at: () => D.W(XA + (XB - XA) * p / 100 + .3, .85, .2) },
         { p: 'pista', txt: 'Pista resistiva', at: () => V(-2.5, .42, -.5), l: 1 },
         { p: 'colectora', txt: 'Pista colectora', at: () => V(-2.5, .42, .5), l: 1 },
         { p: 'cursor', txt: 'Cursor (escobilla)', at: () => cur.localToWorld(V(.3, 1.0, .6)) },
@@ -104,7 +142,7 @@
     id: 'potenciometro', nombre: 'Potenciómetro de posición', categoria: 'Sensores', grupo: 'Resistivos',
     resumen: 'Un divisor de tensión con cursor: convierte una posición en una tensión.',
     titulo: 'Potenciómetro: la posición convertida en tensión',
-    lead: 'Mueve el carro de la máquina: arrastra el cursor sobre la pista resistiva y la tensión de salida sube y baja en línea recta con la posición.',
+    lead: 'Mueve el carro de la máquina: arrastra el cursor sobre la pista resistiva y la tensión de salida sube y baja en línea recta con la posición. Con «Ver por dentro» verás cómo la pista reparte la tensión.',
     camara: { pos: [1, 10, 14.5], tgt: [.4, .4, 0] }, suelo: -.32,
     panel: PANEL, build,
     leyenda: [['#ff5a1f', 'Corriente por la pista'], ['#ffc400', 'Señal del cursor al voltímetro']],

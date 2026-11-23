@@ -64,6 +64,38 @@
     const fot = [-.3, 0, .3].flatMap(dz => [-.2, .2].map(dx => ctx.flow({ color: 0xffd23f, size: .05, gap: .3 }).path([V(-3.4 + .3, 1.0, dz), V(dx, .7, dz)])));
     const fD = ctx.flow({ color: 0xffc400, size: .04, gap: .2 }).path([V(-.6, .72, -1.05), V(-.3, .5, -.3), V(-.3, .5, 0), V(.3, .5, 0), V(.9, .3, .9), V(1.7, .3, .9)]);
 
+    // ---- vista por dentro: la luz suelta electrones en el cristal de CdS ----
+    const D = UT.detalle(ctx, { w: 13.5, h: 8.6, titulo: 'DETALLE A · DENTRO DEL CRISTAL DE SULFURO DE CADMIO' }), G = D.g;
+    const cris = P(boxR(-4.9, 4.9, -2.4, 1.0, -.45, .1, new T.MeshPhysicalMaterial({ color: 0xb5451b, transparent: true, opacity: .35, roughness: .5, depthWrite: false }), G), 'pista', true);
+    for (const sx of [-1, 1]) { P(boxR(sx * 4.9 - .25 * (sx < 0 ? 1 : 0), sx * 4.9 + .25 * (sx > 0 ? 1 : 0), -2.4, 1.0, -.45, .45, M(0xc9cdd2, { metalness: .8, roughness: .3 }), G), 'ldr');
+      D.etiqueta(sx * 5.5, -.7, .6, .6, { size: .9 })(sx < 0 ? '−' : '+'); }
+    const gA = new T.SphereGeometry(.16, 12, 10), mCd = M(0xd9b24a, { roughness: .4 }), mS = M(0x8f5a2a, { roughness: .5 });
+    for (let i = 0; i < 12; i++) for (let j = 0; j < 4; j++) { const a = P(new T.Mesh(gA, (i + j) % 2 ? mCd : mS), 'pista'); a.position.set(-4.4 + i * .8, -2.0 + j * .85, -.15); G.add(a); }
+    const gF = new T.SphereGeometry(.09, 8, 6), gP = new T.SphereGeometry(.1, 10, 8);
+    const pool = (n, geo, mat) => Array.from({ length: n }, () => { const o = new T.Mesh(geo, mat); o.visible = false; o.renderOrder = 4; G.add(o); return { o, v: false, t: 0 }; });
+    const fots = pool(40, gF, new T.MeshBasicMaterial({ color: 0xffd23f })), elec = pool(70, gP, new T.MeshBasicMaterial({ color: 0x8fd3ff })), hue = pool(70, gP, new T.MeshBasicMaterial({ color: 0xff6b6b, transparent: true, opacity: .8 }));
+    const estelas = fots.map(() => { const t = D.traza(2, { color: 0xffd23f, op: .6 }); t.l.visible = false; return t; });
+    const libre = p => p.find(q => !q.v);
+    const tL = D.etiqueta(0, 3.35, 6, .42, { size: .8 }), tN = D.etiqueta(0, -2.95, 10, .38, { size: .75 });
+    D.etiqueta(0, -3.5, 11, .32, { size: .7 })('más luz → más electrones (azul) y huecos (rojo) → R baja', '#ffd166');
+    let acum = 0, acT = 0;
+    const det = (dt, lx, R) => {
+      const k = lx <= .05 ? 0 : Math.min(1, Math.log10(lx + 1) / 3);
+      acum += dt * 16 * k * k; acT += dt * .25;
+      while (acum >= 1) { acum--; const f = libre(fots); if (!f) break; f.v = true; f.o.visible = true; f.o.position.set(-4.5 + Math.random() * 9, 3.0, .3); f.y1 = -2.2 + Math.random() * 3; }
+      while (acT >= 1) { acT--; const e = libre(elec), h = libre(hue); if (e && h) { const x = -4.5 + Math.random() * 9, y = -2.2 + Math.random() * 3; [e, h].forEach(q => { q.v = true; q.o.visible = true; q.t = 2 + Math.random(); q.o.position.set(x, y, .25); }); } }
+      fots.forEach((f, i) => { const t = estelas[i]; if (!f.v) { t.l.visible = false; return; } const p = f.o.position; p.y -= dt * 5;
+        t.l.visible = true; t.set((u, j) => j ? [p.x, p.y, .3] : [p.x, p.y + .5, .3]);
+        if (p.y <= f.y1) { f.v = false; f.o.visible = false; t.l.visible = false;
+          const e = libre(elec), h = libre(hue); if (e && h) [e, h].forEach(q => { q.v = true; q.o.visible = true; q.t = 1.1 + Math.random() * .8; q.o.position.set(p.x, p.y, .25); }); } });
+      const mover = (arr, vx) => arr.forEach(q => { if (!q.v) return; q.t -= dt; const p = q.o.position; p.x += vx * dt; p.y += (Math.random() - .5) * dt * 2.4; p.y = Math.max(-2.3, Math.min(.9, p.y));
+        if (q.t <= 0 || Math.abs(p.x) > 4.75) { q.v = false; q.o.visible = false; } });
+      mover(elec, 1.4); mover(hue, -.9);
+      const n = elec.filter(q => q.v).length;
+      tL('LUZ · ' + (tapado ? 'tapada · ' : '') + fmt(lx, lx < 10 ? 1 : 0) + ' lx', k > .3 ? '#ffd166' : '#eaf2ff');
+      tN('electrones libres: ' + n + '   ·   R = ' + ohm(R));
+    };
+
     const $ = s => panel.querySelector(s);
     const lxI = $('#lx'), lxV = $('#lxV'), tapaB = $('#tapa'), um = $('#um'), umV = $('#umV'), msg = $('#msg');
     const r = { L: $('#rL'), R: $('#rR'), V: $('#rV'), F: $('#rF') }, s = { F: $('#sF'), V: $('#sV'), L: $('#sL'), fD: $('#fD') };
@@ -89,6 +121,7 @@
         ty += ((tapado ? 0 : 3.2) - ty) * Math.min(1, dt * 8); tapa.position.set(0, .45 + ty, 0);
         lamp.setLuz(Math.min(1, lux() / 1000 + (lux() > 0 ? .15 : 0)));
         fot.forEach(f => f.set(lux() > .5 && !tapado ? Math.min(1, .25 + lg / 3) : 0, .6 + lg * .4));
+        det(dt, lx, R);
         top.material.emissiveIntensity = Math.min(.4, lx / 1000 * .4);
         ledF.material.emissiveIntensity = on ? 2 : 0; luzF.intensity = on ? 2.5 : 0;
         fD.set(1, .3 + Vd * .3);
@@ -105,7 +138,10 @@
         s.L.style.fill = `rgba(255,210,63,${Math.min(.6, lx / 1000 * .6).toFixed(2)})`;
         s.fD.classList.add('live');
       },
+      dentro: D.dentro,
       labels: [
+        { p: 'pista', txt: 'Cristal de CdS', at: () => D.W(-4.9, 1.0, .1), l: 1 },
+        { p: 'ldr', txt: 'Electrodo', at: () => D.W(5.15, 1.0, .45) },
         { p: 'ldr', txt: 'LDR', at: () => V(.7, .55, 0) },
         { p: 'pista', txt: 'Pista de sulfuro de cadmio', at: () => V(-.2, .64, .6), l: 1 },
         { p: 'lampara', txt: 'Luz ambiente', at: () => V(-2.6, 1.2, 0) },
@@ -122,7 +158,7 @@
     id: 'ldr', nombre: 'LDR', categoria: 'Sensores', grupo: 'Resistivos',
     resumen: 'Resistencia que baja con la luz: la base de un interruptor crepuscular.',
     titulo: 'LDR: una resistencia que depende de la luz',
-    lead: 'Cambia la luz o tapa la LDR con la mano. Su resistencia pasa de unos cientos de ohmios a casi un megaohmio, y el divisor de tensión enciende la farola cuando oscurece.',
+    lead: 'Cambia la luz o tapa la LDR con la mano. Su resistencia pasa de unos cientos de ohmios a casi un megaohmio, y el divisor de tensión enciende la farola cuando oscurece. Con «Ver por dentro» verás cómo la luz suelta electrones en el cristal.',
     camara: { pos: [2, 7, 14], tgt: [.8, 1.5, 0] }, suelo: -.32,
     panel: PANEL, build,
     leyenda: [['#ffd23f', 'Luz que llega a la LDR'], ['#ffc400', 'Corriente del divisor']],

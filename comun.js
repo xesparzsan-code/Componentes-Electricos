@@ -159,5 +159,73 @@ window.UT = (() => {
     el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cb(); } });
   }
   const pasar = (a, b, k) => a + (b - a) * Math.min(1, k);
-  return { fmt, mats, laminado, Helix, muelle, caja, sector, carrilDIN, carrilDetras, tornillo, rotulo, bombilla, lit, dl, set, momentaneo, opciones, hit, pasar, cuerpoSensor, pantalla };
+
+  // ---------- Vista «por dentro»: lámina de detalle ampliado, apartada del montaje ----------
+  // Se construye lejos (x = 200) y la cámara viaja hasta ella con el botón «Ver por dentro».
+  const OX = 200;
+  function detalle(ctx, { w = 12, h = 7, titulo = '' } = {}) {
+    const { T, V } = ctx, g = new T.Group(); g.position.set(OX, 0, 0); ctx.scene.add(g);
+    const fondo = new T.Mesh(new T.PlaneGeometry(w, h), new T.MeshBasicMaterial({ color: 0x082448, transparent: true, opacity: .62, depthWrite: false }));
+    fondo.position.z = -.8; fondo.renderOrder = -1; g.add(fondo);
+    const lm = (c = 0xeaf2ff, o = .9) => new T.LineBasicMaterial({ color: c, transparent: true, opacity: o });
+    const linea = (pts, { color = 0xeaf2ff, op = .9, dash = 0, z } = {}) => {
+      const P = pts.map(p => Array.isArray(p) ? V(p[0], p[1], z ?? p[2] ?? 0) : p);
+      const mat = dash ? new T.LineDashedMaterial({ color, dashSize: dash, gapSize: dash * .7, transparent: true, opacity: op }) : lm(color, op);
+      const l = new T.Line(new T.BufferGeometry().setFromPoints(P), mat); if (dash) l.computeLineDistances(); g.add(l); return l;
+    };
+    const x0 = -w / 2, x1 = w / 2, y0 = -h / 2, y1 = h / 2, zf = -.79;
+    linea([[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]], { z: zf });
+    linea([[x0 + .15, y0 + .15], [x1 - .15, y0 + .15], [x1 - .15, y1 - .15], [x0 + .15, y1 - .15], [x0 + .15, y0 + .15]], { z: zf, op: .35 });
+    const tw = Math.min(w, 13), th = tw * 96 / 1400;
+    const tt = ctx.plano(ctx.texto([[titulo, 64]], { w: 1400, h: 96, color: '#eaf2ff' }), tw, th, V(0, y1 + th / 2 + .15, zf)); g.add(tt);
+    // trazo que se redibuja cada fotograma (ondas, cotas, líneas de campo)
+    const traza = (n, { color = 0xeaf2ff, op = 1 } = {}) => {
+      const pos = new Float32Array(n * 3), geo = new T.BufferGeometry(); geo.setAttribute('position', new T.BufferAttribute(pos, 3));
+      const l = new T.Line(geo, lm(color, op)); l.frustumCulled = false; g.add(l);
+      return { l, set(f) { let k = 0; for (let i = 0; i < n; i++) { const p = f(i / (n - 1), i); pos[k++] = p[0]; pos[k++] = p[1]; pos[k++] = p[2] || 0; } geo.attributes.position.needsUpdate = true; } };
+    };
+    // texto dinámico sobre la lámina (se redibuja solo si cambia)
+    const etiqueta = (x, y, ww, hh, { color = '#eaf2ff', size = .8, align = 'center', z = 0, bg = null } = {}) => {
+      const c = document.createElement('canvas'); c.width = 512; c.height = Math.max(32, Math.round(512 * hh / ww)); const g2 = c.getContext('2d');
+      const tx = new T.CanvasTexture(c); tx.encoding = T.sRGBEncoding; tx.anisotropy = 4;
+      const m = new T.Mesh(new T.PlaneGeometry(ww, hh), new T.MeshBasicMaterial({ map: tx, transparent: true, depthWrite: false }));
+      m.position.set(x, y, z); m.renderOrder = 5; g.add(m);
+      let ult = null;
+      const set = (txt, col) => { const k = txt + (col || ''); if (k === ult) return; ult = k;
+        g2.clearRect(0, 0, c.width, c.height); if (bg) { g2.fillStyle = bg; g2.fillRect(0, 0, c.width, c.height); } g2.fillStyle = col || color; g2.textBaseline = 'middle'; g2.textAlign = align;
+        let f = c.height * size; g2.font = `600 ${f}px "IBM Plex Mono", Menlo, monospace`;
+        const mw = g2.measureText(txt).width; if (mw > c.width * .96) { f *= c.width * .96 / mw; g2.font = `600 ${f}px "IBM Plex Mono", Menlo, monospace`; }
+        g2.fillText(txt, align === 'left' ? 6 : align === 'right' ? c.width - 6 : c.width / 2, c.height / 2); tx.needsUpdate = true; };
+      set.mesh = m; return set;
+    };
+    // cota con flechas entre dos puntos horizontales
+    const cota = (y, { color = 0xeaf2ff } = {}) => {
+      const t = traza(9, { color });
+      return (a, b) => { const s = .18; t.set((u, i) => [[a, y + s], [a, y - s], [a, y], [a + s, y + s * .6], [a, y], [b, y], [b - s, y + s * .6], [b, y], [b, y - s]][i]); };
+    };
+    // bloques de la electrónica interna en cadena (se iluminan según la señal)
+    const cadena = (nombres, y, xa, xb) => {
+      const n = nombres.length, gap = .35, bw = (xb - xa - gap * (n - 1)) / n, out = [];
+      nombres.forEach((nm, i) => {
+        const cx = xa + bw / 2 + i * (bw + gap);
+        const mat = new T.MeshBasicMaterial({ color: 0x0d3a6e, transparent: true, opacity: .9 });
+        const b = new T.Mesh(new T.PlaneGeometry(bw, .62), mat); b.position.set(cx, y, -.7); g.add(b);
+        linea([[cx - bw / 2, y - .31], [cx + bw / 2, y - .31], [cx + bw / 2, y + .31], [cx - bw / 2, y + .31], [cx - bw / 2, y - .31]], { z: -.69 });
+        if (i < n - 1) linea([[cx + bw / 2, y], [cx + bw / 2 + gap, y], [cx + bw / 2 + gap - .12, y + .1], [cx + bw / 2 + gap, y], [cx + bw / 2 + gap - .12, y - .1]], { z: -.69 });
+        const e = etiqueta(cx, y, bw * .94, .4, { size: .62, z: -.68 }); e(nm);
+        out.push(k => { mat.color.setRGB(.05 + .75 * k, .23 + .5 * k, .43 - .2 * k); e(nm, k > .5 ? '#0b2347' : '#eaf2ff'); });
+      });
+      return out;
+    };
+    const tan = Math.tan(19 * Math.PI / 180), d = 1.1 * Math.max((h + 1.6) / (2 * tan), w / (2 * tan * 1.15));
+    return { g, OX, W: (x, y, z = 0) => V(OX + x, y, z), linea, traza, etiqueta, cota, cadena, dentro: { pos: [OX, 1.7, d * 1.05], tgt: [OX, .85, 0] } };
+  }
+  // símbolo de corriente en corte: punto (sale) o aspa (entra)
+  function simbolo(ctx, sale) {
+    const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+    g.strokeStyle = '#ffb38a'; g.fillStyle = '#ffb38a'; g.lineWidth = 6; g.beginPath(); g.arc(32, 32, 26, 0, 7); g.stroke();
+    if (sale) { g.beginPath(); g.arc(32, 32, 8, 0, 7); g.fill(); } else { g.beginPath(); g.moveTo(16, 16); g.lineTo(48, 48); g.moveTo(48, 16); g.lineTo(16, 48); g.stroke(); }
+    const tx = new ctx.T.CanvasTexture(c); return tx;
+  }
+  return { fmt, mats, detalle, simbolo, laminado, Helix, muelle, caja, sector, carrilDIN, carrilDetras, tornillo, rotulo, bombilla, lit, dl, set, momentaneo, opciones, hit, pasar, cuerpoSensor, pantalla };
 })();

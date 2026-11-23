@@ -22,7 +22,7 @@
       <text x="176" y="16">Oscilador</text><line x1="170" y1="62" x2="296" y2="62" class="thin"/>
       <path id="osc" class="curva" d=""/>
     </svg>
-    <div class="chk"><label><input type="checkbox" id="cIn" checked> Ver por dentro</label></div>`;
+    <div class="chk"><label><input type="checkbox" id="cIn" checked> Carcasa transparente</label></div>`;
 
   function build(ctx, panel) {
     const { T, V, scene, M, boxR, cyl, tube, curva, part: P } = ctx;
@@ -58,6 +58,71 @@
     const fou = ctx.flow({ color: 0xff5a1f, size: .06, gap: .16 });
     const fO = ctx.flow({ color: 0xffc400, size: .05, gap: .25 }).path(curva(wBK, 30));
 
+    // ---- vista por dentro: corte de la cara sensible ampliado ----
+    const D = UT.detalle(ctx, { w: 13.5, h: 8.2, titulo: 'DETALLE A · CORTE DE LA CARA SENSIBLE · ESCALA 5:1' }), G = D.g;
+    const bx = (x0, x1, y0, y1, mat, id, z = .3) => P(boxR(x0, x1, y0, y1, -z, z, mat, G), id);
+    const ferr = M(0x3a3a40, { roughness: .8 });
+    for (const sg of [1, -1]) {
+      bx(-6.2, -.85, sg * 2.3, sg * 2.5, M(0xaab1b9, { metalness: .7, roughness: .35 }), 'cuerpo', .35);
+      bx(-3.0, -1.05, sg * 1.8, sg * 2.2, ferr, 'ferrita');
+    }
+    bx(-3.4, -3.0, -2.2, 2.2, ferr, 'ferrita'); bx(-3.0, -1.05, -.45, .45, ferr, 'ferrita');
+    bx(-1.05, -.85, -2.3, 2.3, M(0x2f6fb5, { roughness: .5 }), 'cara', .35);
+    bx(-6.0, -3.7, -.12, .12, M(0x1f6b3a, { roughness: .6 }), 'circuito', .5);
+    [[-5.4, .3], [-4.6, -.3], [-4.0, .3]].forEach(([x, y]) => bx(x - .25, x + .25, y - .18, y + .18, m.black, 'circuito', .55));
+    const espiras = [];
+    for (const sg of [1, -1]) for (const x of [-2.7, -2.25, -1.8, -1.35]) for (const y of [.75, 1.15, 1.55]) {
+      const c = P(cyl(.18, .5, m.copper, x, sg * y, 0, G, 16), 'bobina'); c.rotation.x = Math.PI / 2; espiras.push(c);
+    }
+    const tSale = UT.simbolo(ctx, true), tEntra = UT.simbolo(ctx, false);
+    const sim = (x, y) => { const s2 = new T.Mesh(new T.PlaneGeometry(.42, .42), new T.MeshBasicMaterial({ map: tSale, transparent: true, depthWrite: false })); s2.position.set(x, y, .4); s2.renderOrder = 6; G.add(s2); return s2; };
+    const simB = [sim(-2.0, 2.0 - .02), sim(-2.0, -2.0 + .02)];   // sentido en el bobinado
+    simB[0].position.set(-2.03, 1.15, .4); simB[1].position.set(-2.03, -1.15, .4);
+    const pl = new T.Group(); G.add(pl);
+    const plM = M(0x8a929c, { metalness: .7, roughness: .35, emissive: 0xff4a00, emissiveIntensity: 0 });
+    P(boxR(0, .8, -2.8, 2.8, -.4, .4, plM, pl), 'pieza');
+    const simF = [sim(0, 0), sim(0, 0)]; simF.forEach((o, i) => { pl.add(o); o.position.set(.4, i ? -1.1 : 1.1, .45); });
+    // líneas de campo: 3 por mitad (dibujo) + partículas que cambian de sentido con la alterna
+    const lazos = [];
+    for (const sg of [1, -1]) for (let k = 1; k <= 3; k++) lazos.push({ sg, k, t: D.traza(70, { color: 0x8fd3ff, op: .55 }), f: ctx.flow({ color: 0x2f8cff, size: .06, gap: .22 }) });
+    const fouD = [1, -1].map(() => ctx.flow({ color: 0xff5a1f, size: .07, gap: .2 }));
+    const osc2 = D.traza(160, { color: 0xffd166 });
+    D.etiqueta(-4.6, 3.55, 3.4, .4, { align: 'left', size: .7 })('OSCILACIÓN');
+    D.linea([[-6.3, 3.0], [-1.2, 3.0]], { op: .3 });
+    const cotaD = D.cota(-2.9), dTxt = D.etiqueta(0, -2.6, 2.4, .36, { size: .75 });
+    const bloques = D.cadena(['OSCILADOR', 'DEMODULADOR', 'DISPARADOR', 'SALIDA PNP'], -3.55, -6.3, 6.3);
+    const ampTxt = D.etiqueta(3.2, 3.3, 5.6, .45, { size: .7, align: 'right' });
+    const W = D.W, X0 = -.85;
+    const lazoPts = (sg, k, xp, metal) => {
+      const yi = .1 + .1 * k, yo = 1.75 + .12 * k, yc = (yi + yo) / 2, ry = (yo - yi) / 2, rx = 1.2 + 1.0 * k, out = [];
+      const tope = xp - .06;
+      for (let i = 0; i <= 40; i++) { const a = -Math.PI / 2 + Math.PI * i / 40; let x = X0 + rx * Math.cos(a); if (metal && x > tope) x = tope + (x - tope) * .12; out.push([x, sg * (yc + ry * Math.sin(a))]); }
+      out.push([-3.2, sg * yo], [-3.2, sg * yi], [X0, sg * yi]);
+      return out;
+    };
+    let fz = 0;
+    const det = (dt, k, ff) => {
+      fz += dt * Math.PI * 2 * .6;
+      const sgn = Math.cos(fz), metal = k > 0;
+      const xp = Math.min(5.6, X0 + .05 + d * .3);
+      pl.position.x = xp; pl.visible = d < 18.5;
+      plM.color.setHex(MAT[mat][1]); plM.metalness = metal ? .7 : 0; plM.transparent = mat === 'vidrio'; plM.opacity = mat === 'vidrio' ? .5 : 1;
+      plM.emissiveIntensity = ff * .45;
+      const corta = metal && pl.visible;
+      lazos.forEach(L => { const pts = lazoPts(L.sg, L.k, xp, corta); L.t.set((u, i) => pts[Math.min(i, pts.length - 1)]);
+        L.t.l.material.opacity = .2 + .5 * amp; L.f.path(pts.map(p => W(p[0], p[1], .45))).set(amp, 1.5 * sgn); });
+      espiras.forEach((c, i) => { c.material.emissive && (c.material.emissive.setHex(0xff6a00), c.material.emissiveIntensity = .5 * amp * Math.abs(sgn)); });
+      simB[0].material.map = sgn > 0 ? tSale : tEntra; simB[1].material.map = sgn > 0 ? tEntra : tSale;
+      simF[0].material.map = sgn > 0 ? tEntra : tSale; simF[1].material.map = sgn > 0 ? tSale : tEntra;
+      simF.forEach(o => { o.material.opacity = ff > .02 ? Math.min(1, ff * 2) : 0; });
+      fouD.forEach((f, i) => { const cy = i ? -1.1 : 1.1, cx = xp + .4, c = []; for (let j = 0; j <= 36; j++) { const a = j / 36 * Math.PI * 2; c.push(W(cx + Math.cos(a) * .75, cy + Math.sin(a) * .75, .45)); }
+        f.path(c).set(pl.visible ? ff * 1.4 : 0, (i ? -1 : 1) * 1.2 * sgn); });
+      osc2.set(u => [-6.3 + u * 5.1, 3.0 + Math.sin(u * Math.PI * 12 - fz * 3) * .42 * amp]);
+      ampTxt('amplitud ' + Math.round(amp * 100) + ' %', amp < .6 ? '#ffd166' : '#eaf2ff');
+      if (pl.visible) { cotaD(X0, xp); dTxt('d = ' + fmt(d, 1) + ' mm'); dTxt.mesh.position.x = xp - X0 > 2.6 ? (X0 + xp) / 2 : xp + 2.1; } else { cotaD(X0, 5.9); dTxt('d = ' + fmt(d, 1) + ' mm →'); dTxt.mesh.position.x = 2.5; }
+      bloques[0](amp); bloques[1](amp); bloques[2](on ? 1 : 0); bloques[3](on ? 1 : 0);
+    };
+
     const $ = s => panel.querySelector(s);
     const dist = $('#dist'), distV = $('#distV'), msg = $('#msg'), autoB = $('#auto'), osc = $('#osc');
     const r = { D: $('#rD'), S: $('#rS'), A: $('#rA'), O: $('#rO') }, s = { h1: $('#h1'), fO: $('#fO') };
@@ -81,6 +146,7 @@
         const ff = k > 0 ? Math.max(0, 1 - d / (Sr * 2.2)) : 0;
         const xf = pieza.position.x - .02, cir = []; for (let i = 0; i <= 40; i++) { const a = i / 40 * Math.PI * 2; cir.push(V(xf, Y + Math.cos(a) * .55, Math.sin(a) * .55)); }
         fou.path(cir).set(ff, 1.4);
+        det(dt, k, ff);
         cs.led.material.emissiveIntensity = on ? 2 : 0;
         lamp.setLuz(on ? 1 : 0); fO.set(on ? 1 : 0, 1.3);
 
@@ -96,8 +162,14 @@
         set(msg, t); msg.hidden = !t;
         UT.lit(s.h1, on, '#ffc04a'); s.fO.classList.toggle('live', on);
       },
+      dentro: D.dentro,
       labels: [
         { p: 'cara', txt: 'Cara sensible', at: () => V(0, Y + .9, 0) },
+        { p: 'ferrita', txt: 'Ferrita (cazoleta)', at: () => D.W(-3.2, 2.05, .3), l: 1 },
+        { p: 'bobina', txt: 'Espiras de la bobina', at: () => D.W(-1.4, -1.55, .3) },
+        { p: 'cara', txt: 'Cara', at: () => D.W(-.95, 2.3, .35) },
+        { p: 'circuito', txt: 'Electrónica', at: () => D.W(-4.6, .45, .5) },
+        { p: 'pieza', txt: 'Pieza (corrientes de Foucault)', at: () => pl.localToWorld(V(.8, 2.6, .4)) },
         { p: 'bobina', at: () => V(-.3, Y - .6, .2), l: 1 },
         { p: 'ferrita', txt: 'Núcleo de ferrita', at: () => V(-.6, Y + .85, 0), l: 1 },
         { p: 'circuito', txt: 'Oscilador y disparador', at: () => V(-2.2, Y + .55, .1) },
@@ -113,7 +185,7 @@
     id: 'inductivo', nombre: 'Detector inductivo', categoria: 'Sensores', grupo: 'Inductivos',
     resumen: 'Detecta metales sin tocarlos gracias a un campo magnético alterno.',
     titulo: 'Detector inductivo de proximidad: ve el metal sin tocarlo',
-    lead: 'Acerca la pieza al detector y cambia su material. Mira cómo el metal amortigua el oscilador y la salida conmuta; con plástico o vidrio no pasa nada.',
+    lead: 'Acerca la pieza al detector y cambia su material. Mira cómo el metal amortigua el oscilador y la salida conmuta; con plástico o vidrio no pasa nada. Con «Ver por dentro» verás el campo de la bobina y las corrientes de Foucault en el corte de la cara.',
     camara: { pos: [3, 6.5, 15], tgt: [.7, 1.2, 0] }, suelo: -.32,
     panel: PANEL, build,
     leyenda: [['#2f8cff', 'Campo alterno de la bobina'], ['#ff5a1f', 'Corrientes de Foucault'], ['#ffc400', 'Salida hacia la carga']],

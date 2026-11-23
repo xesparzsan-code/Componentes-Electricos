@@ -62,6 +62,52 @@
     const lazo = (x0, x1, z) => [V(x0, Y + .25, z), V(x1, Y + .25, z), V(x1, Y + 1.1, z), V(x0, Y + 1.1, z), V(x0, Y + .25, z)];
     const f1 = ctx.flow({ color: 0x2f8cff, size: .06, gap: .2 }).path(lazo(0, -2.6, .15)), f2 = ctx.flow({ color: 0x2f8cff, size: .06, gap: .2 }).path(lazo(0, 2.6, .15));
 
+    // ---- vista por dentro: corte longitudinal ampliado ----
+    const D = UT.detalle(ctx, { w: 13.5, h: 8.6, titulo: 'DETALLE A · CORTE LONGITUDINAL DEL LVDT · ESCALA 2:1' }), G = D.g, S = 1.7;
+    const espT = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+      g.fillStyle = '#3a2a1a'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#ffffff'; g.beginPath(); g.arc(32, 32, 27, 0, 7); g.fill();
+      g.fillStyle = 'rgba(0,0,0,.25)'; g.beginPath(); g.arc(38, 38, 14, 0, 7); g.fill(); const t = new T.CanvasTexture(c); t.wrapS = t.wrapT = T.RepeatWrapping; t.encoding = T.sRGBEncoding; return t; })();
+    const bob = (xa, xb, col, id) => { const out = [];
+      for (const sg of [1, -1]) { const t = espT.clone(); t.needsUpdate = true; t.repeat.set(Math.round((xb - xa) / .3), 3);
+        out.push(P(boxR(xa, xb, sg > 0 ? .85 : -1.75, sg > 0 ? 1.75 : -.85, -.35, .35, M(col, { map: t, roughness: .5, emissive: 0xffa040, emissiveIntensity: 0 }), G), id)); }
+      return out; };
+    const bP = bob(-.78 * S, .78 * S, 0xe08a3c, 'primario'), b1 = bob(-2.83 * S, -1.08 * S, 0xd9b24a, 's1'), b2 = bob(1.08 * S, 2.83 * S, 0xd9b24a, 's2');
+    for (const sg of [1, -1]) { P(boxR(-5.6, 5.6, sg * 1.95, sg * 2.15, -.4, .4, M(0xaab1b9, { metalness: .7, roughness: .35 }), G), 'carcasa');
+      P(boxR(-5.1, 5.1, sg * .72, sg * .84, -.36, .36, m.card, G), 'carrete'); }
+    for (const x of [-2.95, -.88, .88, 2.95]) for (const sg of [1, -1]) P(boxR(x * S - .06, x * S + .06, sg * .72, sg * 1.85, -.37, .37, m.dark, G), 'carrete');
+    const nucD = new T.Group(); G.add(nucD);
+    P(boxR(-1.2 * S, 1.2 * S, -.5, .5, -.32, .32, M(0x6a6f75, { metalness: .6, roughness: .4 }), nucD), 'nucleo');
+    P(boxR(1.2 * S, 6.4, -.14, .14, -.14, .14, m.steel, nucD), 'vastago');
+    const rot = (txt, x, y) => D.etiqueta(x, y, .9, .42, { size: .8, z: .6, bg: 'rgba(8,36,72,.9)' })(txt);
+    rot('S1', -1.955 * S, 1.3); rot('P', 0, 1.3); rot('S2', 1.955 * S, 1.3);
+    // dos lazos de flujo por lado: dentro del núcleo, salen por su extremo y vuelven por la carcasa
+    const lazos = [];
+    for (const lado of [-1, 1]) for (let k = 0; k < 2; k++) for (const sg of [1, -1]) lazos.push({ lado, k, sg, t: D.traza(40, { color: 0x8fd3ff, op: .6 }), f: ctx.flow({ color: 0x2f8cff, size: .065, gap: .22 }) });
+    const lazoPts = (lado, k, sg, xe) => { const yi = .12 + .22 * k, yo = 1.88 - .08 * k, out = [];
+      out.push([0, sg * yi], [xe - lado * .05, sg * yi]);
+      for (let i = 1; i < 12; i++) { const a = Math.PI / 2 * i / 12; out.push([xe + lado * Math.sin(a) * .45, sg * (yi + (yo - yi) * (1 - Math.cos(a)))]); }
+      out.push([xe + lado * .45, sg * yo], [0, sg * yo], [0, sg * yi]); return out; };
+    const tr = [D.traza(120, { color: 0xffd166 }), D.traza(120, { color: 0xffd166 }), D.traza(160, { color: 0x7ef0b0 })];
+    D.linea([[-2.83 * S, 3.15], [-1.08 * S, 3.15]], { op: .3 }); D.linea([[1.08 * S, 3.15], [2.83 * S, 3.15]], { op: .3 }); D.linea([[-4.8, -3.25], [4.8, -3.25]], { op: .3 });
+    const tS1 = D.etiqueta(-1.955 * S, 2.45, 3.4, .38, { size: .75 }), tS2 = D.etiqueta(1.955 * S, 2.45, 3.4, .38, { size: .75 });
+    const tO = D.etiqueta(0, -3.85, 9, .4, { size: .75 }), cotaX = D.cota(-2.45), tX = D.etiqueta(0, -2.45, 2.4, .36, { size: .7 });
+    const det = (vs1, vs2, vo, sg, ph) => {
+      const xc = pos / 10 * S; nucD.position.x = xc;
+      const xl = Math.max(-5.0, xc - 1.2 * S), xr = Math.min(5.0, xc + 1.2 * S), ver = cF.checked;
+      lazos.forEach(L => { const pts = lazoPts(L.lado, L.k, L.sg, L.lado < 0 ? xl : xr), v = (L.lado < 0 ? vs1 : vs2) / V0;
+        L.t.set((u, i) => pts[Math.min(i, pts.length - 1)]); L.t.l.visible = ver; L.t.l.material.opacity = .15 + .6 * v;
+        L.f.path(pts.map(p => D.W(p[0], p[1], .45))).set(ver ? v * 1.4 : 0, 1.3 * sg * -L.lado); });
+      const a = Math.abs(sg);
+      bP.forEach(b => b.material.emissiveIntensity = .25 * a); b1.forEach(b => b.material.emissiveIntensity = .5 * a * vs1 / V0); b2.forEach(b => b.material.emissiveIntensity = .5 * a * vs2 / V0);
+      const onda = (u, A) => Math.sin(u * Math.PI * 6 - ph) * A;
+      tr[0].set(u => [-2.83 * S + u * 1.75 * S, 3.15 + onda(u, .55 * vs1 / V0)]);
+      tr[1].set(u => [1.08 * S + u * 1.75 * S, 3.15 + onda(u, .55 * vs2 / V0)]);
+      tr[2].set(u => [-4.8 + u * 9.6, -3.25 + onda(u * 1.6, .55 * vo / V0)]);
+      tS1('S1 · ' + fmt(vs1, 2) + ' V'); tS2('S2 · ' + fmt(vs2, 2) + ' V');
+      tO('SALIDA = S1 − S2 = ' + fmt(Math.abs(vo), 2) + ' V' + (Math.abs(pos) < .3 ? ' (se anulan)' : vo > 0 ? ' · fase 0°' : ' · fase 180°'), Math.abs(vo) > .05 ? '#7ef0b0' : '#eaf2ff');
+      cotaX(0, xc); tX('x = ' + (pos > 0 ? '+' : '') + fmt(pos, 1) + ' mm'); tX.mesh.position.x = Math.abs(xc) > 2.6 ? xc / 2 : xc + (xc >= 0 ? 1.6 : -1.6);
+    };
+
     const $ = s => panel.querySelector(s);
     const posI = $('#pos'), posV = $('#posV'), msg = $('#msg'), autoB = $('#auto'), cF = $('#cF');
     const r = { P: $('#rP'), S1: $('#rS1'), S2: $('#rS2'), O: $('#rO'), F: $('#rF') }, wP = $('#wP'), wO = $('#wO'), pto = $('#pto');
@@ -81,6 +127,7 @@
         const vs1 = V0 * (.5 - .4 * pos / PMAX), vs2 = V0 * (.5 + .4 * pos / PMAX), vo = vs1 - vs2;
         const sg = Math.cos(ph);
         f1.set(cF.checked ? vs1 / V0 * 1.6 : 0, 1.4 * sg); f2.set(cF.checked ? vs2 / V0 * 1.6 : 0, -1.4 * sg);
+        det(vs1, vs2, vo, sg, ph);
         pri.material.emissiveIntensity = .12 + .12 * Math.abs(sg);
         s1.material.emissiveIntensity = vs1 / V0 * .4 * Math.abs(sg); s2.material.emissiveIntensity = vs2 / V0 * .4 * Math.abs(sg);
         let a = '', b = '';
@@ -99,7 +146,13 @@
           : `El núcleo está más dentro de ${pos < 0 ? 'S1' : 'S2'}: ese secundario recibe más flujo. La salida es proporcional al desplazamiento (${fmt(V0 * .8 / PMAX, 3)} V/mm) y la fase indica hacia qué lado.`;
         set(msg, t); msg.hidden = false;
       },
+      dentro: D.dentro,
       labels: [
+        { p: 'primario', txt: 'Primario', at: () => D.W(0, 1.75, .35) },
+        { p: 's1', txt: 'Secundario S1', at: () => D.W(-1.08 * S, -1.75, .35), l: 1 },
+        { p: 's2', txt: 'Secundario S2', at: () => D.W(1.08 * S, -1.75, .35) },
+        { p: 'nucleo', txt: 'Núcleo', at: () => D.W(pos / 10 * S + 1.2 * S, .5, .35) },
+        { p: 'carcasa', at: () => D.W(-5.6, 2.15, .4), l: 1 },
         { p: 'primario', txt: 'Primario', at: () => V(0, Y - 1.0, -.2) },
         { p: 's1', txt: 'Secundario S1', at: () => V(-1.95, Y - 1.0, -.2), l: 1 },
         { p: 's2', txt: 'Secundario S2', at: () => V(1.95, Y - 1.0, -.2) },
@@ -116,7 +169,7 @@
     id: 'lvdt', nombre: 'LVDT', categoria: 'Sensores', grupo: 'Inductivos',
     resumen: 'Transformador diferencial que mide desplazamientos sin rozamiento.',
     titulo: 'LVDT: un transformador que mide posiciones',
-    lead: 'Mueve la pieza y con ella el núcleo. Mira cómo cambian las tensiones de los dos secundarios y cómo la salida pasa por cero en el centro y cambia de fase al cruzarlo.',
+    lead: 'Mueve la pieza y con ella el núcleo. Mira cómo cambian las tensiones de los dos secundarios y cómo la salida pasa por cero en el centro y cambia de fase al cruzarlo. Con «Ver por dentro» verás el flujo que llega a cada secundario y sus tensiones.',
     camara: { pos: [2.5, 7.5, 16.5], tgt: [.9, 1.5, 0] }, suelo: -.32,
     panel: PANEL, build,
     leyenda: [['#2f8cff', 'Flujo hacia cada secundario (alterno)']],

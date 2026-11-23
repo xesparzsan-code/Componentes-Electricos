@@ -62,6 +62,42 @@
     const burb2 = ctx.flow({ color: 0xffffff, size: .05, gap: .4 }).path([V(-.9, 1.0, -.6), V(-.95, 2.2, -.5), V(-.9, 3.6, -.6)]);
 
     // curvas del SVG
+    // ---- vista por dentro: átomos y electrones de cada material (modelo simplificado) ----
+    const D = UT.detalle(ctx, { w: 13.8, h: 8.8, titulo: 'DETALLE A · POR DENTRO DEL MATERIAL · MODELO SIMPLIFICADO' }), G = D.g;
+    const gAt = new T.SphereGeometry(.2, 16, 12), gE = new T.SphereGeometry(.085, 10, 8), mE = new T.MeshBasicMaterial({ color: 0x8fd3ff });
+    const lado = (cx, matA, id, nE, titulo) => {
+      D.linea([[cx - 3.05, -2.75], [cx + 3.05, -2.75], [cx + 3.05, 2.6], [cx - 3.05, 2.6], [cx - 3.05, -2.75]], { op: .5 });
+      D.etiqueta(cx, 3.0, 6, .42, { size: .78 })(titulo);
+      for (const sx of [-1, 1]) { P(boxR(cx + sx * 3.05 - .12, cx + sx * 3.05 + .12, -2.75, 2.6, -.3, .3, M(0x9aa3ad, { metalness: .7, roughness: .35 }), G), id);
+        D.etiqueta(cx + sx * 3.4, 2.3, .5, .5, { size: .9 })(sx < 0 ? '−' : '+'); }
+      const at = []; for (let i = 0; i < 7; i++) for (let j = 0; j < 5; j++) { const a = P(new T.Mesh(gAt, matA), id); const h = [cx + (i - 3) * .8, -1.95 + j * .9]; a.position.set(h[0], h[1], 0); G.add(a); at.push({ a, h, f: 5 + Math.random() * 4, p: Math.random() * 7, q: Math.random() * 7 }); }
+      const el = []; for (let k = 0; k < nE; k++) { const e = new T.Mesh(gE, mE); e.position.set(cx - 2.8 + Math.random() * 5.6, -2.4 + Math.random() * 4.7, .3); e.renderOrder = 4; G.add(e); el.push({ e, vy: 0, home: at[(k * 7) % at.length], ph: Math.random() * 7 }); }
+      return { cx, at, el };
+    };
+    const pt = lado(-3.45, M(0xc9cdd2, { metalness: .8, roughness: .25 }), 'elemento', 26, 'PLATINO · Pt100');
+    const nt = lado(3.45, M(0x2f6b4e, { roughness: .5 }), 'ntc', 40, 'SEMICONDUCTOR · NTC');
+    const rP2 = D.etiqueta(-3.45, -3.15, 6, .38, { size: .75 }), rN2 = D.etiqueta(3.45, -3.15, 6, .38, { size: .75 });
+    D.etiqueta(-3.45, -3.6, 6.1, .3, { size: .66 })('calor → vibran más → más choques → R sube', '#ff8a7a');
+    D.etiqueta(3.45, -3.6, 6.1, .3, { size: .66 })('calor → más electrones libres → R baja', '#7ef0b0');
+    let tt = 0;
+    const det = (dt, Tc, rp, rn) => {
+      tt += dt; const A = .025 + .15 * Tc / 100;
+      [pt, nt].forEach(L => L.at.forEach(o => o.a.position.set(o.h[0] + Math.sin(tt * o.f + o.p) * A, o.h[1] + Math.cos(tt * o.f * 1.1 + o.q) * A, 0)));
+      // platino: siempre los mismos electrones libres; cuanto más vibra la red, más frenados van
+      const vP = 1.7 * (100 / rp) ** 4, sacudida = .4 + 3 * Tc / 100;
+      pt.el.forEach(o => { const p = o.e.position; o.vy += (Math.random() - .5) * sacudida * dt * 8; o.vy *= .9;
+        p.x += (vP + (Math.random() - .5) * sacudida) * dt; p.y += o.vy * dt;
+        if (p.y > 2.45 || p.y < -2.6) o.vy *= -1, p.y = Math.max(-2.6, Math.min(2.45, p.y));
+        if (p.x > pt.cx + 2.85) p.x = pt.cx - 2.85; });
+      // NTC: el calor libera electrones de los átomos
+      const n = Math.max(1, Math.min(40, Math.round(40 * rNtc(100) / rn)));
+      nt.el.forEach((o, k) => { const p = o.e.position;
+        if (k < n) { p.x += 1.1 * dt; p.y += (Math.random() - .5) * dt * 2; if (p.x > nt.cx + 2.85) p.x = nt.cx - 2.85; p.y = Math.max(-2.6, Math.min(2.45, p.y)); }
+        else { const hp = o.home.a.position, a = tt * 4 + o.ph, tx = hp.x + Math.cos(a) * .3, ty = hp.y + Math.sin(a) * .3; p.x += (tx - p.x) * Math.min(1, dt * 6); p.y += (ty - p.y) * Math.min(1, dt * 6); } });
+      rP2('R = ' + fmt(rp, 1) + ' Ω');
+      rN2('R = ' + (rn >= 1000 ? fmt(rn / 1000, 2) + ' kΩ' : fmt(rn, 0) + ' Ω') + '  ·  electrones libres: ' + n);
+    };
+
     const $ = s => panel.querySelector(s);
     const X = t => 40 + t / 100 * 230, YP = r => 110 - (r - 100) / 40 * 102, YN = r => 110 - r / 33000 * 102;
     { let a = '', b = ''; for (let t = 0; t <= 100; t += 2) { a += (t ? ' L' : 'M') + X(t).toFixed(1) + ' ' + YP(rPt(t)).toFixed(1); b += (t ? ' L' : 'M') + X(t).toFixed(1) + ' ' + YN(rNtc(t)).toFixed(1); }
@@ -90,6 +126,7 @@
         dP(fmt(rp, 2) + ' Ω'); dN(rn >= 1000 ? fmt(rn / 1000, 2) + ' kΩ' : fmt(rn, 0) + ' Ω');
         pP.setAttribute('cx', X(Tc).toFixed(1)); pP.setAttribute('cy', YP(rp).toFixed(1));
         pN.setAttribute('cx', X(Tc).toFixed(1)); pN.setAttribute('cy', YN(rn).toFixed(1));
+        det(dt, Tc, rp, rn);
         const sn = 3950 / (Tc + 273.15) ** 2 * rn;
         ctx.step(heat ? 1 : enfr ? 2 : 0);
         set(r.T, fmt(Tc, 1) + ' °C');
@@ -99,7 +136,10 @@
         const t = `Por cada grado la Pt100 sube 0,385 Ω, siempre igual (lineal). La NTC baja ${sn >= 1000 ? fmt(sn / 1000, 2) + ' kΩ' : fmt(sn, 0) + ' Ω'}: mucho más sensible, pero su sensibilidad cambia con la temperatura (no lineal).`;
         set(msg, t); msg.hidden = false;
       },
+      dentro: D.dentro,
       labels: [
+        { p: 'elemento', txt: 'Átomos de platino', at: () => D.W(-3.45 - 2.4, 1.95, .2), l: 1 },
+        { p: 'ntc', txt: 'Átomos del óxido semiconductor', at: () => D.W(3.45 + 2.4, 1.95, .2) },
         { p: 'pt100', txt: 'Sonda Pt100', at: () => V(PX - .12, 3.6, 0), l: 1 },
         { p: 'elemento', txt: 'Hilo de platino', at: () => V(PX - .15, 1.2, .1), l: 1 },
         { p: 'cabezal', txt: 'Cabezal de conexión', at: () => V(PX - .45, 6.0, 0), l: 1 },
@@ -115,7 +155,7 @@
     id: 'temperatura', nombre: 'Pt100 y NTC', categoria: 'Sensores', grupo: 'Resistivos',
     resumen: 'Dos resistencias que cambian con la temperatura: una lineal y otra muy sensible.',
     titulo: 'Pt100 y NTC: medir la temperatura con una resistencia',
-    lead: 'Calienta el agua o pon hielo y compara las dos sondas: la Pt100 sube poco y siempre igual; la NTC baja mucho y en curva.',
+    lead: 'Calienta el agua o pon hielo y compara las dos sondas: la Pt100 sube poco y siempre igual; la NTC baja mucho y en curva. Con «Ver por dentro» verás qué pasa con los átomos y los electrones de cada material.',
     camara: { pos: [2, 7.5, 17], tgt: [0, 2.5, 0] }, suelo: -.32,
     panel: PANEL, build,
     leyenda: [],
