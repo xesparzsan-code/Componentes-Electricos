@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Taller de componentes</title>
+<link rel="icon" type="image/png" href="img/favicon.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -133,8 +135,15 @@ h1,h2,.brand,.card b,.info b,.quiz b,.subsec{font-family:'Space Grotesk',system-
 h1{text-transform:uppercase;letter-spacing:.01em;font-size:clamp(28px,3.8vw,44px)}
 .cat,.soon,h3,.legend,.lb,.tools button,.secnav button,.go,.back,.modelos button,.cod,.caj-d,.quiz span,th{font-family:'IBM Plex Mono',ui-monospace,monospace}
 .top{background:rgba(8,30,62,.75);border-bottom:1.5px solid var(--ink)}
-.brand{text-transform:uppercase;letter-spacing:.04em;font-size:17px}
+.brand{text-transform:uppercase;letter-spacing:.04em;font-size:17px;display:inline-flex;align-items:center;gap:10px}.brand img{border-radius:7px;display:block}
 .back{color:var(--blue)}
+/* selectores del panel */
+.sels{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin:10px 0}
+.sel{display:flex;flex-direction:column;gap:3px;font:500 12px 'IBM Plex Mono',monospace;color:var(--mute)}
+.sel select{font:500 14px 'IBM Plex Sans',sans-serif;background:rgba(8,30,62,.8);color:var(--ink);border:1.5px solid var(--line);border-radius:0;padding:6px 8px}
+.sel select:focus-visible{outline:2px solid var(--amb);outline-offset:1px}
+#cPanel .row.tipo{flex-wrap:wrap}#cPanel .row.tipo .sm{flex:1 1 40%}
+h3.ent{margin:12px 0 4px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--blue)}
 /* cajetín */
 #cTitulo{font-size:clamp(24px,2.8vw,34px)}
 .cajet{display:grid;grid-template-columns:minmax(0,1fr) 260px;border:2px solid var(--ink);background:rgba(8,30,62,.35)}
@@ -186,7 +195,7 @@ input[type=range],input[type=checkbox]{accent-color:var(--blue)}
 </head>
 <body>
 <nav class="top">
-  <a class="brand" href="#">Taller de componentes</a>
+  <a class="brand" href="#"><img src="img/icono.png" alt="" width="30" height="30">Taller de componentes</a>
   <a class="back" id="back" href="#" hidden>← Todos los componentes</a>
 </nav>
 
@@ -249,6 +258,7 @@ input[type=range],input[type=checkbox]{accent-color:var(--blue)}
 <script src="comp-galga.js"></script>
 <script src="comp-temperatura.js"></script>
 <script src="comp-ldr.js"></script>
+<script src="comp-aop.js"></script>
 <script>
 {
 const comps = window.COMPONENTES;
@@ -257,7 +267,8 @@ const SECCIONES = [
   ['mando', 'Mando y maniobra', 'Los que encienden, paran y gobiernan las máquinas.', ['Mando y maniobra'], null, 'MAND'],
   ['sensores', 'Sensores', 'Detectan objetos o miden magnitudes y las convierten en señales eléctricas.', ['Sensores'], ['Detectores mecánicos', 'Inductivos', 'Capacitivos', 'Resistivos'], 'SENS'],
   ['maquinas', 'Máquinas eléctricas', 'Transforman la energía eléctrica.', ['Máquinas'], null, 'MAQ'],
-  ['electronica', 'Electrónica', 'Componentes de semiconductor y pasivos.', ['Electrónica'], null, 'ELEC']
+  ['electronica', 'Electrónica', 'Componentes de semiconductor y pasivos.', ['Electrónica'], null, 'ELEC'],
+  ['aop', 'Amplificadores operacionales', 'Los ocho montajes básicos del AO, cada uno con su osciloscopio.', ['Amplificadores operacionales'], null, 'AOP']
 ];
 const CODIGO = {};
 const tarjeta = c => `<a class="card" href="#${c.id}"><span class="cod">${CODIGO[c.id]} · ${c.grupo || c.categoria}</span><b>${c.nombre}</b><p>${c.resumen}</p><span class="go">Abrir modelo 3D →</span></a>`;
