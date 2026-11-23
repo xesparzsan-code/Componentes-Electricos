@@ -19,4 +19,4 @@ Web de aprendizaje con componentes eléctricos y electrónicos en 3D interactivo
 - [x] Relé electromecánico
 - [ ] Magnetotérmico, diferencial, contactor, fusible, pulsador/seta, final de carrera, transformador, motor CC, diodo, transistor, condensador
 
-Se publica automáticamente en Netlify con cada cambio en `main`.
+Se publica automáticamente en Cloudflare Workers con cada cambio en `main` (configuración en `wrangler.toml`).

@@ -1,0 +1,7 @@
+# Configuración de Cloudflare Workers (se aplica sola en cada publicación)
+# Web estática: Cloudflare sirve los archivos de esta carpeta tal cual.
+name = "componentes-electricos"
+compatibility_date = "2026-11-05"
+
+[assets]
+directory = "."
