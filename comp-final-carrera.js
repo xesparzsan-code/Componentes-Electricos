@@ -151,7 +151,7 @@
   }
 
   window.COMPONENTES.push({
-    id: 'final-carrera', nombre: 'Final de carrera', categoria: 'Sensores',
+    id: 'final-carrera', nombre: 'Final de carrera', categoria: 'Sensores', grupo: 'Detectores mecánicos',
     resumen: 'Detecta posición por contacto mecánico.',
     titulo: 'Final de carrera: la máquina se entera de dónde está',
     lead: 'El carro avanza hasta que su leva empuja el rodillo. Mira cómo el microrruptor cambia de golpe, corta el motor por el contacto NC y enciende el piloto por el NA.',

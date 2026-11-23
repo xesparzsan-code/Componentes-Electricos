@@ -121,6 +121,34 @@ window.UT = (() => {
       cb(b.dataset.v);
     });
   }
+
+  // Cuerpo de sensor cilíndrico roscado (tipo M18) con el eje en x: cara sensible en x0, parte trasera en x1 (< x0)
+  function cuerpoSensor(ctx, { x0, x1, y = 0, z = 0, r = .9, cara = 0x2f6fb5 } = {}) {
+    const { T, V, M, cyl, part: P, tube } = ctx, L = x0 - x1;
+    const ejeX = o => { o.rotation.z = Math.PI / 2; return o; };
+    const shell = ejeX(P(new T.Mesh(new T.CylinderGeometry(r, r, L - .4, 40, 1, true), new T.MeshPhysicalMaterial({ color: 0xb9c0c8, metalness: .6, roughness: .3, transparent: true, opacity: .22, depthWrite: false, side: T.DoubleSide })), 'cuerpo', true));
+    shell.position.set(x1 + .2 + (L - .4) / 2, y, z); shell.renderOrder = 2; ctx.scene.add(shell);
+    const anillos = [];
+    for (let x = x1 + .35; x < x0 - .3; x += .22) { const a = new T.Mesh(new T.TorusGeometry(r + .01, .025, 6, 40), M(0xc9cdd2, { metalness: .8, roughness: .3 })); a.rotation.y = Math.PI / 2; a.position.set(x, y, z); P(a, 'cuerpo'); ctx.scene.add(a); anillos.push(a); }
+    for (const x of [x1 + .8, x0 - 1.0]) ejeX(P(ctx.cyl(r * 1.42, .3, M(0xaab1b9, { metalness: .8, roughness: .3 }), x, y, z, null, 6), 'tuercas'));
+    ejeX(P(cyl(r * .98, .2, M(cara, { roughness: .5 }), x0 - .1, y, z, null, 40), 'cara'));
+    ejeX(P(cyl(r * .92, .45, M(0x2b2f36, { roughness: .6 }), x1 + .22, y, z, null, 32), 'cuerpo'));
+    const led = P(new T.Mesh(new T.TorusGeometry(r * .8, .07, 8, 32), M(0x553000, { emissive: 0xff9a1f, emissiveIntensity: 0 })), 'led');
+    led.rotation.y = Math.PI / 2; led.position.set(x1 - .01, y, z); ctx.scene.add(led);
+    return { shell, anillos, led, setCorte(v) { shell.material.opacity = v ? .22 : 1; shell.material.depthWrite = !v; } };
+  }
+
+  // pantalla de un aparato de medida (canvas que se redibuja solo cuando cambia el texto)
+  function pantalla(ctx, pos, w, h, rot = [0, 0, 0]) {
+    const T = ctx.T, c = document.createElement('canvas'); c.width = 384; c.height = Math.round(384 * h / w); const g = c.getContext('2d');
+    const tx = new T.CanvasTexture(c); tx.encoding = T.sRGBEncoding;
+    const p = new T.Mesh(new T.PlaneGeometry(w, h), new T.MeshBasicMaterial({ map: tx })); p.position.copy(pos); p.rotation.set(...rot); ctx.scene.add(p);
+    let ult = '';
+    return txt => { if (txt === ult) return; ult = txt; const L = [].concat(txt);
+      g.fillStyle = '#b8d4a8'; g.fillRect(0, 0, c.width, c.height); g.fillStyle = '#1a2a14'; g.textAlign = 'right';
+      L.forEach((t, i) => { let f = c.height / L.length * .62; g.font = `600 ${f}px Inter, Arial`; const mw = g.measureText(t).width; if (mw > c.width * .9) { f *= c.width * .9 / mw; g.font = `600 ${f}px Inter, Arial`; } g.fillText(t, c.width - 16, c.height * (i + .72) / L.length); });
+      tx.needsUpdate = true; };
+  }
   // zona clicable dentro de un esquema SVG (rect.hit). mantener = actúa mientras se mantiene pulsada
   function hit(panel, sel, cb, mantener, etiqueta) {
     const el = panel.querySelector(sel); if (!el) return;
@@ -131,5 +159,5 @@ window.UT = (() => {
     el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cb(); } });
   }
   const pasar = (a, b, k) => a + (b - a) * Math.min(1, k);
-  return { fmt, mats, laminado, Helix, muelle, caja, sector, carrilDIN, carrilDetras, tornillo, rotulo, bombilla, lit, dl, set, momentaneo, opciones, hit, pasar };
+  return { fmt, mats, laminado, Helix, muelle, caja, sector, carrilDIN, carrilDetras, tornillo, rotulo, bombilla, lit, dl, set, momentaneo, opciones, hit, pasar, cuerpoSensor, pantalla };
 })();
