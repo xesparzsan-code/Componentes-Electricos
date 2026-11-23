@@ -3,7 +3,7 @@
 // generadores en las entradas y un osciloscopio que dibuja entradas y salida. AO ideal alimentado a ±12 V (satura a ±11 V).
 (() => {
   const { set, fmt } = UT;
-  const VSAT = 11, A0 = 2e5, FV = .35;              // FV: ciclos por segundo en pantalla (el tiempo va ralentizado)
+  const VSAT = 11, A0 = 2e5, FV = .35, RLD = 10000;              // FV: ciclos por segundo en pantalla (el tiempo va ralentizado)
   const clip = v => Math.max(-VSAT, Math.min(VSAT, v));
   const RS = [1000, 2200, 4700, 10000, 22000, 47000, 100000];
   const CS = [10e-9, 47e-9, 100e-9, 470e-9, 1e-6];
@@ -34,7 +34,7 @@
     if (sels.length) h += `<div class="sels">${sels.join('')}</div>`;
     if (c.reset) h += `<div class="row"><button class="sm" id="reset">Descargar el condensador (reiniciar)</button></div>`;
     h += `<p class="msg" id="msg"></p>`;
-    h += UT.dl([['rIn', c.ent.length > 1 ? 'Entradas' : 'Vin', '—'], ['rVp', 'V+ (entrada no inversora)', '—'], ['rVn', 'V− (entrada inversora)', '—'], ['rVo', 'Vout', '—'], ['rG', c.gLab || 'Ganancia', '—'], ['rI', c.iLab || 'Corriente', '—']]);
+    h += UT.dl([['rIn', c.ent.length > 1 ? 'Entradas' : 'Vin', '—'], ['rVp', 'V+ (entrada no inversora)', '—'], ['rVn', 'V− (entrada inversora)', '—'], ['rVo', 'Vout', '—'], ['rG', c.gLab || 'Ganancia', '—'], ['rI', c.iLab || 'Corriente', '—'], ['rIo', 'Salida del AO (carga + realim.)', '—']]);
     h += `<p class="nota-sch">El color de cada pista indica su tensión: <b style="color:#ff6b5a">rojo</b> positiva, <b style="color:#5aa2ff">azul</b> negativa, gris 0 V. El tiempo va muy ralentizado para poder seguirlo.</p>`;
     return h;
   }
@@ -126,7 +126,14 @@
       c.lay(B);
       let led = null;
       if (c.led) { led = P(new T.Mesh(new T.SphereGeometry(.22, 20, 14), M(0x444444, { emissive: 0x00ff66, emissiveIntensity: 0, transparent: true, opacity: .9 })), 'led'); led.position.set(4.3, .3, .9); ctx.add(led);
-        wire('o', [[4.3, 0], [4.3, .9]]); etq.led = { at: () => V(4.3, .55, .9), txt: 'LED de salida' }; }
+        wire('o', [[4.3, 0], [4.3, .7]]); B.res('rl', [4.3, 1.1], [4.3, 2.9], 'R 1 kΩ'); wire('k', [[4.3, 1.1], [4.3, .9]]); gnd([4.3, 2.9]);
+        etq.led = { at: () => V(4.3, .55, .9), txt: 'LED de salida' }; R.rl(1000); }
+      else { B.res('rl', [4.2, 0], [4.2, 2.6], 'RL'); gnd([4.2, 2.6]); if (!c.R || !c.R.some(r => r[0] === 'rl')) R.rl(RLD); }
+      // la corriente de salida del AO: sale (o entra) por su patilla de salida, se reparte entre carga y realimentación,
+      // y la toma de la alimentación: de +12 V cuando da corriente, hacia −12 V cuando la absorbe
+      rama([pin.o, [2.6, 0]], 'io');
+      rama(c.led ? [[2.6, 0], [4.3, 0], [4.3, 3.25]] : [[2.6, 0], [4.2, 0], [4.2, 2.95]], 'iL');
+      rama([[pin.ox + .1, -1.25], [pin.ox + .1, -.6]], 'ip'); rama([[pin.ox + .1, .6], [pin.ox + .1, 1.25]], 'in');
 
       // ---- vista por dentro: qué hace el AO ----
       const D = UT.detalle(ctx, { w: 12.5, h: 7.6, titulo: 'DETALLE A · EL AMPLIFICADOR OPERACIONAL POR DENTRO' }), G = D.g;
@@ -198,6 +205,8 @@
             v = {}; c.ent.forEach(([k]) => { v[k] = entrada(k, st.th); v['d' + k] = st[k].val * DONDA[st[k].tipo](st.th) * 2 * Math.PI * (st.f || 1); });
             if (c.reset) st.vi = clip(st.vi - v[c.ent[0][0]] / (st.r1 * st.c) * (dth / ns) / (2 * Math.PI * st.f));
             r = c.calc(st, v);
+            r.iL = c.led ? Math.sign(r.vo) * Math.max(0, Math.abs(r.vo) - 2) / 1000 : r.vo / (st.rl || RLD);
+            r.io = r.iL + (r.ifb || 0); Object.assign(r.I, { iL: r.iL, io: r.io, ip: Math.max(0, r.io), in: Math.max(0, -r.io) });
             acc += dth / ns / (Math.PI * 2) * 160;
             while (acc >= 1) { acc -= 1; c.canales.forEach(([, , key], ci) => { hist[ci][hp] = key === 'o' ? r.vo : v[key]; }); hp = (hp + 1) % NB; }
           }
@@ -213,7 +222,7 @@
           // panel
           set($('#rIn'), c.ent.map(([k]) => (c.ent.length > 1 ? k.toUpperCase() + ' ' : '') + volt(v[k])).join(' · '));
           set($('#rVp'), volt(r.vp)); set($('#rVn'), volt(r.vn)); set($('#rVo'), volt(r.vo), sat ? 'on' : '');
-          set($('#rG'), c.g(st, v, r)); set($('#rI'), r.i == null ? '—' : amp(r.i));
+          set($('#rG'), c.g(st, v, r)); set($('#rI'), r.i == null ? '—' : amp(r.i)); set($('#rIo'), amp(r.io) + (Math.abs(r.io) < 2e-7 ? '' : r.io > 0 ? ' (da)' : ' (absorbe)'));
           set($('#msg'), c.msg(st, v, r) + (sat && c.id !== 'aop-comparador' ? ' ⚠ Saturada: la salida no puede pasar de ±11 V porque el AO se alimenta a ±12 V.' : ''));
           // detalle interno
           const dif = c.fb && !sat ? r.vo / A0 : r.vp - r.vn;
@@ -232,14 +241,15 @@
   // ---------- partes comunes ----------
   const PARTES = {
     aop: { t: 'Amplificador operacional (741)', d: 'Amplifica muchísimo (unas 200 000 veces) la diferencia entre sus dos entradas: Vout = A · (V+ − V−). Por la entrada + y la − casi no entra corriente. Solo puede dar tensiones entre sus alimentaciones.' },
-    alim: { t: 'Alimentación ±12 V', d: 'El AO se alimenta con una fuente simétrica: +12 V y −12 V respecto a masa. Su salida queda limitada a unos ±11 V (saturación).' },
+    alim: { t: 'Alimentación ±12 V', d: 'El AO se alimenta con una fuente simétrica: +12 V y −12 V respecto a masa. De ahí sale la corriente que da la salida: cuando el AO da corriente la toma de +12 V; cuando la absorbe, la manda a −12 V. Su salida queda limitada a unos ±11 V (saturación).' },
     pistas: { t: 'Pistas de cobre', d: 'Unen los componentes. Su color indica la tensión de ese punto: rojo positiva, azul negativa, gris cerca de 0 V.' },
     masa: { t: 'Masa (0 V)', d: 'Punto de referencia del circuito: todas las tensiones se miden respecto a él.' },
     bornes: { t: 'Bornes de entrada y salida', d: 'Puntos donde se conectan las señales: los generadores en las entradas y el osciloscopio en la salida.' },
     gen: { t: 'Generador de funciones', d: 'Da la señal de entrada: continua, senoidal, cuadrada o triangular. En su pantalla se ve el valor de cada instante.' },
-    osc: { t: 'Osciloscopio', d: 'Dibuja las tensiones con el paso del tiempo: amarillo la entrada, cian la salida. 3 V por división; las líneas rojas discontinuas marcan la saturación (±11 V).' },
+    osc: { t: 'Osciloscopio', d: 'Dibuja las tensiones con el paso del tiempo: amarillo la entrada, cian la salida. 3 V por división; las líneas rojas discontinuas marcan la saturación (±11 V). Su entrada es de 1 MΩ: casi no toma corriente.' },
     placa: { t: 'Placa de circuito', d: 'Placa donde está montado el esquema. Los componentes están colocados igual que en el dibujo del esquema.' },
-    led: { t: 'LED bicolor de salida', d: 'Verde cuando la salida está en +Vsat, rojo cuando está en −Vsat.' }
+    led: { t: 'LED bicolor de salida', d: 'Verde cuando la salida está en +Vsat, rojo cuando está en −Vsat. Su resistencia de 1 kΩ limita la corriente a unos 9 mA.' },
+    rl: { t: 'Carga RL (10 kΩ)', d: 'Representa lo que se conecta a la salida (otro circuito, un relé, un indicador…). Su corriente no sale de la entrada: la da el AO, que la toma de su alimentación de ±12 V.' }
   };
   const P2 = (o) => Object.assign({}, PARTES, o);
 
@@ -276,7 +286,7 @@
         B.res('r1', [-1.4, 2.2], [-4.2, 2.2], 'R1'); B.gnd([-4.2, 2.2]);
         B.res('r2', [-1.4, 2.2], [2.6, 2.2], 'R2'); B.wire('o', [[2.6, 2.2], [2.6, 0]]); B.wire('o', [p.o, [5.6, 0]]); B.borne([5.6, 0], 'Vout', 'o');
         B.rama([[2.6, 0], [2.6, 2.2], [-1.4, 2.2], [-4.2, 2.2], [-4.2, 2.55]], 'i'); },
-      calc(s, v) { const vo = clip(v.v1 * (1 + s.r2 / s.r1)), vn = vo * s.r1 / (s.r1 + s.r2), i = vo / (s.r1 + s.r2); return { n: { v1: v.v1, n: vn, o: vo }, I: { i }, vp: v.v1, vn, vo, i }; },
+      calc(s, v) { const vo = clip(v.v1 * (1 + s.r2 / s.r1)), vn = vo * s.r1 / (s.r1 + s.r2), i = vo / (s.r1 + s.r2); return { n: { v1: v.v1, n: vn, o: vo }, I: { i }, vp: v.v1, vn, vo, i, ifb: i }; },
       g: s => '1 + R2/R1 = ' + fmt(1 + s.r2 / s.r1, 2),
       msg: (s, v, r) => `Vout = Vin · (1 + R2/R1) = ${volt(v.v1)} · ${fmt(1 + s.r2 / s.r1, 2)} = ${volt(v.v1 * (1 + s.r2 / s.r1))}. Misma forma y mismo signo que la entrada.`,
       pasos: [['1. Entrada por la +', 'La señal entra por la entrada no inversora. Como por ella no entra corriente, la fuente casi no se carga: impedancia de entrada altísima.'],
@@ -296,8 +306,8 @@
         B.wire('n', [[-1.4, -.6], p.a]); B.wire('n', [[-1.4, -.6], [-1.4, -2.3]]); B.res('r2', [-1.4, -2.3], [2.6, -2.3], 'R2');
         B.wire('o', [[2.6, -2.3], [2.6, 0]]); B.wire('o', [p.o, [5.6, 0]]); B.borne([5.6, 0], 'Vout', 'o');
         B.wire('g', [p.b, [-1.4, .6], [-1.4, 1.3]]); B.gnd([-1.4, 1.3]);
-        B.rama([[-5.6, -.6], [-1.4, -.6], [-1.4, -2.3], [2.6, -2.3], [2.6, 0], [p.o[0], 0]], 'i'); },
-      calc(s, v) { const vo = clip(-s.r2 / s.r1 * v.v1), vn = (v.v1 * s.r2 + vo * s.r1) / (s.r1 + s.r2), i = (v.v1 - vn) / s.r1; return { n: { v1: v.v1, n: vn, o: vo }, I: { i }, vp: 0, vn, vo, i }; },
+        B.rama([[-5.6, -.6], [-1.4, -.6], [-1.4, -2.3], [2.6, -2.3], [2.6, 0]], 'i'); },
+      calc(s, v) { const vo = clip(-s.r2 / s.r1 * v.v1), vn = (v.v1 * s.r2 + vo * s.r1) / (s.r1 + s.r2), i = (v.v1 - vn) / s.r1; return { n: { v1: v.v1, n: vn, o: vo }, I: { i }, vp: 0, vn, vo, i, ifb: -i }; },
       g: s => '−R2/R1 = −' + fmt(s.r2 / s.r1, 2),
       msg: (s, v, r) => `Vout = −Vin · R2/R1 = −(${volt(v.v1)}) · ${fmt(s.r2 / s.r1, 2)} = ${volt(-v.v1 * s.r2 / s.r1)}. Cuando la entrada sube, la salida baja.`,
       pasos: [['1. Masa virtual', 'La entrada + está a masa. Con realimentación negativa, el AO hace que la entrada − también esté a 0 V, aunque no esté conectada a masa.'],
@@ -314,9 +324,8 @@
       canales: [['Vin', '#ffd166', 'v1'], ['Vout', '#5ee7ff', 'o']], gLab: 'Ganancia', iLab: 'Corriente en la carga',
       lay(B) { const p = B.aop(.5, '+'); B.gen('v1', -.6, 'Vin');
         B.wire('v1', [[-5.6, -.6], p.a]); B.wire('o', [p.b, [-1.4, .6], [-1.4, 1.9], [2.6, 1.9], [2.6, 0]]); B.wire('o', [p.o, [5.6, 0]]); B.borne([5.6, 0], 'Vout', 'o');
-        B.res('rl', [4.2, 0], [4.2, 2.6], 'RL'); B.gnd([4.2, 2.6]);
-        B.rama([[p.o[0], 0], [4.2, 0], [4.2, 2.95]], 'i'); },
-      calc(s, v) { const vo = clip(v.v1); return { n: { v1: v.v1, o: vo }, I: { i: vo / s.rl }, vp: v.v1, vn: vo, vo, i: vo / s.rl }; },
+      },
+      calc(s, v) { const vo = clip(v.v1); return { n: { v1: v.v1, o: vo }, I: {}, vp: v.v1, vn: vo, vo, i: vo / s.rl, ifb: 0 }; },
       g: () => '1 (Vout = Vin)',
       msg: (s, v, r) => `Vout = Vin = ${volt(r.vo)}. La carga RL toma ${amp(r.i)} y los da el AO: del generador no sale corriente.`,
       pasos: [['1. Realimentación total', 'Toda la salida vuelve a la entrada −. El AO se ajusta hasta que Vout = Vin.'],
@@ -337,9 +346,9 @@
         B.wire('n', [[-1.6, -2.6], [-1.6, -.05]]); B.wire('n', [[-1.6, -.6], p.a]);
         B.res('rf', [-1.6, -2.6], [2.6, -2.6], 'Rf'); B.wire('o', [[2.6, -2.6], [2.6, 0]]); B.wire('o', [p.o, [5.6, 0]]); B.borne([5.6, 0], 'Vout', 'o');
         B.wire('g', [p.b, [-.9, .6], [-.9, 1.4]]); B.gnd([-.9, 1.4]);
-        B.rama([[-5.6, -1.4], [-1.6, -1.4]], 'i1'); B.rama([[-5.6, -.05], [-1.6, -.05]], 'i2'); B.rama([[-1.6, -1.4], [-1.6, -2.6], [2.6, -2.6], [2.6, 0], [p.o[0], 0]], 'i'); },
+        B.rama([[-5.6, -1.4], [-1.6, -1.4]], 'i1'); B.rama([[-5.6, -.05], [-1.6, -.05]], 'i2'); B.rama([[-1.6, -1.4], [-1.6, -2.6], [2.6, -2.6], [2.6, 0]], 'i'); },
       calc(s, v) { const vo = clip(-s.rf * (v.v1 / s.r1 + v.v2 / s.r2)), G = 1 / s.r1 + 1 / s.r2 + 1 / s.rf, vn = (v.v1 / s.r1 + v.v2 / s.r2 + vo / s.rf) / G;
-        const i1 = (v.v1 - vn) / s.r1, i2 = (v.v2 - vn) / s.r2; return { n: { v1: v.v1, v2: v.v2, n: vn, o: vo }, I: { i1, i2, i: i1 + i2 }, vp: 0, vn, vo, i: i1 + i2 }; },
+        const i1 = (v.v1 - vn) / s.r1, i2 = (v.v2 - vn) / s.r2; return { n: { v1: v.v1, v2: v.v2, n: vn, o: vo }, I: { i1, i2, i: i1 + i2 }, vp: 0, vn, vo, i: i1 + i2, ifb: -(i1 + i2) }; },
       g: s => fmt(s.rf / s.r1, 2) + ' · ' + fmt(s.rf / s.r2, 2),
       msg: (s, v, r) => `Vout = −Rf · (V1/R1 + V2/R2) = −(${fmt(s.rf / s.r1, 2)} · ${volt(v.v1)} + ${fmt(s.rf / s.r2, 2)} · ${volt(v.v2)}) = ${volt(-s.rf * (v.v1 / s.r1 + v.v2 / s.r2))}.`,
       pasos: [['1. Masa virtual', 'Igual que en el inversor, la entrada − se mantiene a 0 V. Cada entrada da una corriente V/R que no depende de las demás.'],
@@ -359,9 +368,9 @@
         B.res('r2', [-1.6, -2.3], [2.6, -2.3], 'R2'); B.wire('o', [[2.6, -2.3], [2.6, 0]]); B.wire('o', [p.o, [5.6, 0]]); B.borne([5.6, 0], 'Vout', 'o');
         B.wire('v2', [[-5.6, 1.4], [-4.4, 1.4]]); B.res('r3', [-4.4, 1.4], [-1.6, 1.4], 'R3'); B.wire('p', [[-1.6, 1.4], [-1.6, .6], p.b]);
         B.res('r4', [-1.6, 1.4], [-1.6, 3.3], 'R4'); B.gnd([-1.6, 3.3]);
-        B.rama([[-5.6, -.6], [-1.6, -.6], [-1.6, -2.3], [2.6, -2.3], [2.6, 0], [p.o[0], 0]], 'i1'); B.rama([[-5.6, 1.4], [-1.6, 1.4], [-1.6, 3.65]], 'i2'); },
+        B.rama([[-5.6, -.6], [-1.6, -.6], [-1.6, -2.3], [2.6, -2.3], [2.6, 0]], 'i1'); B.rama([[-5.6, 1.4], [-1.6, 1.4], [-1.6, 3.65]], 'i2'); },
       calc(s, v) { const vp = v.v2 * s.r2 / (s.r1 + s.r2), vo = clip(s.r2 / s.r1 * (v.v2 - v.v1)), vn = Math.abs(vo) >= VSAT ? (v.v1 * s.r2 + vo * s.r1) / (s.r1 + s.r2) : vp;
-        const i1 = (v.v1 - vn) / s.r1; return { n: { v1: v.v1, v2: v.v2, n: vn, p: vp, o: vo }, I: { i1, i2: v.v2 / (s.r1 + s.r2) }, vp, vn, vo, i: i1 }; },
+        const i1 = (v.v1 - vn) / s.r1; return { n: { v1: v.v1, v2: v.v2, n: vn, p: vp, o: vo }, I: { i1, i2: v.v2 / (s.r1 + s.r2) }, vp, vn, vo, i: i1, ifb: -i1 }; },
       g: s => 'R2/R1 = ' + fmt(s.r2 / s.r1, 2),
       msg: (s, v, r) => `Vout = (R2/R1) · (V2 − V1) = ${fmt(s.r2 / s.r1, 2)} · (${volt(v.v2)} − ${volt(v.v1)}) = ${volt(s.r2 / s.r1 * (v.v2 - v.v1))}.`,
       pasos: [['1. Dos caminos', 'V2 llega a la entrada + a través del divisor R3–R4. V1 llega a la entrada − por R1, con R2 de realimentación.'],
@@ -381,8 +390,8 @@
         B.wire('n', [[-1.4, -.6], p.a]); B.wire('n', [[-1.4, -.6], [-1.4, -2.3]]); B.res('r1', [-1.4, -2.3], [2.6, -2.3], 'R');
         B.wire('o', [[2.6, -2.3], [2.6, 0]]); B.wire('o', [p.o, [5.6, 0]]); B.borne([5.6, 0], 'Vout', 'o');
         B.wire('g', [p.b, [-1.4, .6], [-1.4, 1.3]]); B.gnd([-1.4, 1.3]);
-        B.rama([[-5.6, -.6], [-1.4, -.6], [-1.4, -2.3], [2.6, -2.3], [2.6, 0], [p.o[0], 0]], 'i'); },
-      calc(s, v) { const i = s.c * v.dv1, vo = clip(-s.r1 * i); return { n: { v1: v.v1, n: 0, o: vo }, I: { i }, vp: 0, vn: Math.abs(vo) >= VSAT ? (v.v1) * .02 : 0, vo, i }; },
+        B.rama([[-5.6, -.6], [-1.4, -.6], [-1.4, -2.3], [2.6, -2.3], [2.6, 0]], 'i'); },
+      calc(s, v) { const i = s.c * v.dv1, vo = clip(-s.r1 * i); return { n: { v1: v.v1, n: 0, o: vo }, I: { i }, vp: 0, vn: Math.abs(vo) >= VSAT ? (v.v1) * .02 : 0, vo, i, ifb: -i }; },
       g: s => 'R·C = ' + fmt(s.r1 * s.c * 1000, 3) + ' ms',
       msg: (s, v, r) => `Vout = −R · C · dVin/dt = −${fmt(s.r1 * s.c * 1000, 3)} ms · ${fmt(v.dv1, 0)} V/s = ${volt(-s.r1 * s.c * v.dv1)}. ${s.v1.tipo === 'dc' ? 'Con continua la entrada no cambia: no pasa corriente y la salida es 0.' : ''}`,
       pasos: [['1. El condensador', 'Solo deja pasar corriente mientras la tensión de entrada está cambiando: I = C · dVin/dt.'],
@@ -402,8 +411,8 @@
         B.wire('n', [[-1.4, -.6], p.a]); B.wire('n', [[-1.4, -.6], [-1.4, -2.3]]); B.cap('c', [-1.4, -2.3], [2.6, -2.3], 'C');
         B.wire('o', [[2.6, -2.3], [2.6, 0]]); B.wire('o', [p.o, [5.6, 0]]); B.borne([5.6, 0], 'Vout', 'o');
         B.wire('g', [p.b, [-1.4, .6], [-1.4, 1.3]]); B.gnd([-1.4, 1.3]);
-        B.rama([[-5.6, -.6], [-1.4, -.6], [-1.4, -2.3], [2.6, -2.3], [2.6, 0], [p.o[0], 0]], 'i'); },
-      calc(s, v) { const vo = s.vi, sat = Math.abs(vo) >= VSAT - 1e-6, i = sat ? 0 : v.v1 / s.r1; return { n: { v1: v.v1, n: sat ? v.v1 * .3 : 0, o: vo }, I: { i }, vp: 0, vn: sat ? v.v1 * .3 : 0, vo, i }; },
+        B.rama([[-5.6, -.6], [-1.4, -.6], [-1.4, -2.3], [2.6, -2.3], [2.6, 0]], 'i'); },
+      calc(s, v) { const vo = s.vi, sat = Math.abs(vo) >= VSAT - 1e-6, i = sat ? 0 : v.v1 / s.r1; return { n: { v1: v.v1, n: sat ? v.v1 * .3 : 0, o: vo }, I: { i }, vp: 0, vn: sat ? v.v1 * .3 : 0, vo, i, ifb: -i }; },
       g: s => 'R·C = ' + fmt(s.r1 * s.c * 1000, 3) + ' ms',
       msg: (s, v, r) => s.v1.tipo === 'dc'
         ? `Con continua la salida baja (o sube) a ritmo constante: ${fmt(Math.abs(v.v1) / (s.r1 * s.c), 0)} V/s, hasta saturar. Pulsa «Descargar el condensador» para empezar de nuevo.`
